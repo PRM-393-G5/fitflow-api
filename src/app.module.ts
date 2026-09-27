@@ -7,6 +7,7 @@ import { JwtConfigModule } from './auth/tokens/jwt-config.module.js';
 import { validateEnv } from './config/env.validation.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
+import { TemplatesModule } from './templates/templates.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({
@@ -21,6 +22,7 @@ import { UsersModule } from './users/users.module.js';
     UsersModule,
     JwtConfigModule,
     AuthModule,
+    TemplatesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
