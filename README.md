@@ -44,6 +44,7 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | POST | `/api/auth/google` | Body `{idToken}` (Google Sign-In ID token) → `200 {accessToken, expiresIn, refreshToken, user}`; creates the account on first sign-in; `401` if Google does not verify the token or the email |
 | POST | `/api/auth/refresh` | Body `{refreshToken}` → new `{accessToken, expiresIn, refreshToken}`; the old refresh token stops working |
 | POST | `/api/auth/logout` | Body `{refreshToken}` → `204`; revokes that session's refresh tokens |
+| GET | `/api/templates` | Built-in workout plans in display order, in the app's `Workout` JSON shape (`id`, `name`, `durationMinutes`, `level`, `category`, `description`, `exercises`) |
 | GET | `/api/me` | 🔒 Profile `{id, email, name, photoUrl}` of the caller |
 
 🔒 = needs `Authorization: Bearer <accessToken>`.
@@ -69,6 +70,7 @@ hashes in `refreshtokens` with a TTL index, and single-use:
 | Collection | Key fields | Notes |
 |---|---|---|
 | `users` | `googleSub` (unique), `email`, `name`, `photoUrl`, `meta`, `metaUpdatedAt` | Created on first Google sign-in; `meta` is the app's last-write-wins profile blob |
+| `workouttemplates` | `_id` (app id, e.g. `full-body-foundation`), `name`, `durationMinutes`, `level`, `category`, `description`, `exercises`, `order` | Public built-in plans |
 | `refreshtokens` | `userId`, `sessionId`, `tokenHash` (unique), `usedAt`, `expiresAt` (TTL) | Current and used tokens of each session |
 
 Every error uses the same body:
