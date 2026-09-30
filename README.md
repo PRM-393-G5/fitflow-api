@@ -18,8 +18,16 @@ then the API issues its own JWT and stores per-user sync data.
 cd backend
 npm install
 cp .env.example .env   # adjust MONGODB_URI / PORT if needed
-npm run start:dev      # http://localhost:3001/api
+npm run build && npm run seed   # load the built-in workout templates
+npm run start:dev               # http://localhost:3001/api
 ```
+
+`npm run seed` makes the `workouttemplates` collection match
+`src/templates/seed/workout-templates.seed.ts` (exported from the app's
+`lib/data/seed_workouts.dart`); it is safe to run repeatedly. It runs the
+compiled `dist/seed.js` and needs only `MONGODB_URI`, so it never rebuilds
+`dist/` under a running server. Seed data is fully validated before the
+first write.
 
 Every route lives under `/api`. The app refuses to start when a required
 environment variable is missing or invalid (see `src/config/env.validation.ts`).
@@ -44,6 +52,7 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | POST | `/api/auth/google` | Body `{idToken}` (Google Sign-In ID token) → `200 {accessToken, expiresIn, refreshToken, user}`; creates the account on first sign-in; `401` if Google does not verify the token or the email |
 | POST | `/api/auth/refresh` | Body `{refreshToken}` → new `{accessToken, expiresIn, refreshToken}`; the old refresh token stops working |
 | POST | `/api/auth/logout` | Body `{refreshToken}` → `204`; revokes that session's refresh tokens |
+| GET | `/api/templates` | Built-in workout plans in display order (`Cache-Control: public, max-age=300`), in the app's `Workout` JSON shape (`id`, `name`, `durationMinutes`, `level`, `category`, `description`, `exercises`) |
 | GET | `/api/me` | 🔒 Profile `{id, email, name, photoUrl}` of the caller |
 
 🔒 = needs `Authorization: Bearer <accessToken>`.
@@ -69,6 +78,7 @@ hashes in `refreshtokens` with a TTL index, and single-use:
 | Collection | Key fields | Notes |
 |---|---|---|
 | `users` | `googleSub` (unique), `email`, `name`, `photoUrl`, `meta`, `metaUpdatedAt` | Created on first Google sign-in; `meta` is the app's last-write-wins profile blob |
+| `workouttemplates` | `_id` (app id, e.g. `full-body-foundation`), `name`, `durationMinutes`, `level`, `category`, `description`, `exercises`, `order` | Public built-in plans |
 | `refreshtokens` | `userId`, `sessionId`, `tokenHash` (unique), `usedAt`, `expiresAt` (TTL) | Current and used tokens of each session |
 
 Every error uses the same body:
