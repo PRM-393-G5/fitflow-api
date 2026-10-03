@@ -115,6 +115,25 @@ describe('User docs (e2e)', () => {
     );
   });
 
+  it('refuses writes once the account is deleted', async () => {
+    const ghost = await signedInUser(app, 'ghost');
+    await app
+      .get<Model<User>>(getModelToken(User.name))
+      .deleteOne({ googleSub: 'ghost' });
+    await ghost.put('/api/me/docs/sessions/s1', session('s1', 10)).expect(401);
+    await ghost.put('/api/me/docs/sessions', { docs: [] }).expect(401);
+    await ghost.delete('/api/me/docs/sessions/s1').expect(401);
+    expect(await docs.countDocuments()).toBe(0);
+  });
+
+  it('accepts bulk bodies over the default 100 kB limit', async () => {
+    const big = Array.from({ length: 300 }, (_, i) => ({
+      ...session(`big${i}`, 10),
+      notes: 'x'.repeat(1000),
+    }));
+    await alice.put('/api/me/docs/sessions', { docs: big }).expect(204);
+  });
+
   it('requires an access token', async () => {
     await request(app.getHttpServer()).get('/api/me/docs/sessions').expect(401);
     await request(app.getHttpServer())
@@ -130,6 +149,7 @@ describe('User docs (e2e)', () => {
     ['$ field', 'put', '/api/me/docs/sessions/s1', { $where: 'x' }],
     ['nested $ field', 'put', '/api/me/docs/sessions/s1', { a: [{ $gt: 1 }] }],
     ['dotted field', 'put', '/api/me/docs/sessions/s1', { 'a.b': 1 }],
+    ['NUL in field', 'put', '/api/me/docs/sessions/s1', { 'a\u0000b': 1 }],
     ['bulk without docs', 'put', '/api/me/docs/sessions', { items: [] }],
     ['bulk doc without id', 'put', '/api/me/docs/sessions', { docs: [{}] }],
     [

@@ -9,7 +9,7 @@ const MAX_DEPTH = 20;
 /**
  * Synced documents are opaque app JSON, so they are checked by hand
  * rather than by a DTO: a plain object whose keys are safe to store in
- * MongoDB (no `$` prefix, no dots) at any depth.
+ * MongoDB (no `$` prefix, dots or NUL) at any depth.
  */
 export function assertDocData(value: unknown): Record<string, unknown> {
   if (!isPlainObject(value)) {
@@ -55,7 +55,8 @@ function assertSafeKeys(value: unknown, depth: number) {
     for (const item of value) assertSafeKeys(item, depth + 1);
   } else if (isPlainObject(value)) {
     for (const [key, item] of Object.entries(value)) {
-      if (key.startsWith('$') || key.includes('.')) {
+      // BSON cannot store NUL in names; $/. would be operators/paths.
+      if (key.startsWith('$') || key.includes('.') || key.includes('\0')) {
         throw new BadRequestException(`Field name "${key}" is not allowed`);
       }
       assertSafeKeys(item, depth + 1);

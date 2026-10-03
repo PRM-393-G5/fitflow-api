@@ -14,6 +14,7 @@ describe('assertDocData', () => {
   it('rejects $-prefixed and dotted keys at any depth', () => {
     expect(() => assertDocData({ a: { b: [{ $set: 1 }] } })).toThrow(/\$set/);
     expect(() => assertDocData({ 'x.y': 1 })).toThrow(/x\.y/);
+    expect(() => assertDocData({ 'a\u0000b': 1 })).toThrow(BadRequestException);
   });
 
   it('rejects absurd nesting', () => {
