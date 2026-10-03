@@ -53,9 +53,20 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | POST | `/api/auth/refresh` | Body `{refreshToken}` → new `{accessToken, expiresIn, refreshToken}`; the old refresh token stops working |
 | POST | `/api/auth/logout` | Body `{refreshToken}` → `204`; revokes that session's refresh tokens |
 | GET | `/api/templates` | Built-in workout plans in display order (`Cache-Control: public, max-age=300`), in the app's `Workout` JSON shape (`id`, `name`, `durationMinutes`, `level`, `category`, `description`, `exercises`) |
+| GET | `/api/me/docs/:kind` | 🔒 All synced documents of `kind` (`sessions`, `workouts`, `weights`); deleted ones as `{id, deleted: true}` |
+| PUT | `/api/me/docs/:kind` | 🔒 Bulk upsert, body `{docs: [{id, …}]}` (≤ 500, ≤ 2 MB) → `204` |
+| PUT | `/api/me/docs/:kind/:id` | 🔒 Create or replace one document (the app's JSON) → `204` |
+| DELETE | `/api/me/docs/:kind/:id` | 🔒 Soft delete (tombstone) → `204` |
 | GET | `/api/me` | 🔒 Profile `{id, email, name, photoUrl}` of the caller |
 
 🔒 = needs `Authorization: Bearer <accessToken>`.
+
+### Sync documents
+
+Documents are the app's own JSON (`WorkoutSession`, `Workout`,
+`BodyWeightEntry`), stored as-is. Ids must match `[A-Za-z0-9_.:-]{1,128}`
+and field names may not start with `$` or contain `.`. A `PUT` after a
+`DELETE` revives the document.
 
 ### Sessions
 
@@ -79,6 +90,7 @@ hashes in `refreshtokens` with a TTL index, and single-use:
 |---|---|---|
 | `users` | `googleSub` (unique), `email`, `name`, `photoUrl`, `meta`, `metaUpdatedAt` | Created on first Google sign-in; `meta` is the app's last-write-wins profile blob |
 | `workouttemplates` | `_id` (app id, e.g. `full-body-foundation`), `name`, `durationMinutes`, `level`, `category`, `description`, `exercises`, `order` | Public built-in plans |
+| `userdocs` | `userId`, `kind`, `docId`, `data`, `deleted` — unique `(userId, kind, docId)` | Synced sessions / custom workouts / weights; deletes are tombstones so another device's merge cannot resurrect them |
 | `refreshtokens` | `userId`, `sessionId`, `tokenHash` (unique), `usedAt`, `expiresAt` (TTL) | Current and used tokens of each session |
 
 Every error uses the same body:
@@ -98,4 +110,4 @@ npm run build
 ## Roadmap
 
 The migration off Firebase is split into small PRs — see
-[`docs/backend-migration.md`](../docs/backend-migration.md).
+[`docs/backend-migration.md`](https://github.com/PRM-393-G5/fitflow/blob/main/docs/backend-migration.md) in the app repository.
