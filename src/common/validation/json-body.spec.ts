@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { assertDocData, assertDocList, MAX_BULK_DOCS } from './doc-body.js';
+import { assertDocData, assertDocList, MAX_BULK_DOCS } from './json-body.js';
 
 describe('assertDocData', () => {
   it('accepts plain nested JSON', () => {

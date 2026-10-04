@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { DOC_ID_PATTERN } from './doc-params.dto.js';
+import { DOC_ID_PATTERN } from '../../user-docs/dto/doc-params.dto.js';
 
 /** Upper bound on documents per bulk request (the app sends ≤ 400). */
 export const MAX_BULK_DOCS = 500;
@@ -7,13 +7,16 @@ export const MAX_BULK_DOCS = 500;
 const MAX_DEPTH = 20;
 
 /**
- * Synced documents are opaque app JSON, so they are checked by hand
- * rather than by a DTO: a plain object whose keys are safe to store in
- * MongoDB (no `$` prefix, dots or NUL) at any depth.
+ * Synced documents and the meta blob are opaque app JSON, so they are
+ * checked by hand rather than by a DTO: a plain object whose keys are
+ * safe to store in MongoDB (no `$` prefix, dots or NUL) at any depth.
  */
-export function assertDocData(value: unknown): Record<string, unknown> {
+export function assertDocData(
+  value: unknown,
+  what = 'Document',
+): Record<string, unknown> {
   if (!isPlainObject(value)) {
-    throw new BadRequestException('Document must be a JSON object');
+    throw new BadRequestException(`${what} must be a JSON object`);
   }
   assertSafeKeys(value, 0);
   return value;
@@ -43,7 +46,9 @@ export function assertDocList(
   });
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+export function isPlainObject(
+  value: unknown,
+): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
