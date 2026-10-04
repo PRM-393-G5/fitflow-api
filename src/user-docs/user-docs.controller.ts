@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Put,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator.js';
@@ -14,6 +15,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthUser } from '../auth/jwt-auth.guard.js';
 import { assertDocData, assertDocList } from './dto/doc-body.js';
 import { DocParams, KindParams } from './dto/doc-params.dto.js';
+import { UsersService } from '../users/users.service.js';
 import { UserDocsService } from './user-docs.service.js';
 import type { SyncedDoc } from './user-docs.service.js';
 
@@ -24,7 +26,20 @@ import type { SyncedDoc } from './user-docs.service.js';
 @Controller('me/docs/:kind')
 @UseGuards(JwtAuthGuard)
 export class UserDocsController {
-  constructor(private readonly docs: UserDocsService) {}
+  constructor(
+    private readonly docs: UserDocsService,
+    private readonly users: UsersService,
+  ) {}
+
+  /**
+   * Access tokens outlive account deletion by up to 15 minutes; refuse
+   * writes for an account that is gone so no orphaned documents appear.
+   */
+  private async requireAccount(caller: AuthUser) {
+    if (!(await this.users.findById(caller.userId))) {
+      throw new UnauthorizedException('Account no longer exists');
+    }
+  }
 
   /** All documents of the kind; deleted ones as `{id, deleted: true}`. */
   @Get()
@@ -43,7 +58,9 @@ export class UserDocsController {
     @Param() params: KindParams,
     @Body() body: unknown,
   ): Promise<void> {
-    await this.docs.upsertMany(caller.userId, params.kind, assertDocList(body));
+    const docs = assertDocList(body);
+    await this.requireAccount(caller);
+    await this.docs.upsertMany(caller.userId, params.kind, docs);
   }
 
   /** Creates or replaces one document; the URL id wins over a body `id`. */
@@ -55,6 +72,7 @@ export class UserDocsController {
     @Body() body: unknown,
   ): Promise<void> {
     const data = assertDocData(body);
+    await this.requireAccount(caller);
     await this.docs.upsertMany(caller.userId, params.kind, [
       { ...data, id: params.id },
     ]);
@@ -67,6 +85,7 @@ export class UserDocsController {
     @CurrentUser() caller: AuthUser,
     @Param() params: DocParams,
   ): Promise<void> {
+    await this.requireAccount(caller);
     await this.docs.tombstone(caller.userId, params.kind, params.id);
   }
 }

@@ -1,18 +1,24 @@
 import { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Test, TestingModuleBuilder } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module.js';
-import { configureApp } from '../src/app.setup.js';
+import { APP_OPTIONS, configureApp } from '../src/app.setup.js';
 import { TokensService } from '../src/auth/tokens/tokens.service.js';
 import { UsersService } from '../src/users/users.service.js';
 
-/** The full HTTP app, configured like main.ts. */
-export async function createTestApp(): Promise<INestApplication<App>> {
-  const moduleRef = await Test.createTestingModule({
-    imports: [AppModule],
-  }).compile();
-  const app = moduleRef.createNestApplication<INestApplication<App>>();
+/**
+ * The full HTTP app, configured like main.ts. [customize] can override
+ * providers (e.g. fake Google) before compiling.
+ */
+export async function createTestApp(
+  customize: (builder: TestingModuleBuilder) => TestingModuleBuilder = (b) => b,
+): Promise<INestApplication<App>> {
+  const moduleRef = await customize(
+    Test.createTestingModule({ imports: [AppModule] }),
+  ).compile();
+  const app =
+    moduleRef.createNestApplication<INestApplication<App>>(APP_OPTIONS);
   configureApp(app);
   await app.init();
   return app;

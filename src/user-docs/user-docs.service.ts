@@ -22,6 +22,7 @@ export class UserDocsService implements OnModuleInit {
   async list(userId: string, kind: DocKind): Promise<SyncedDoc[]> {
     const docs = await this.docs
       .find({ userId: new Types.ObjectId(userId), kind })
+      .select({ docId: 1, data: 1, deleted: 1, _id: 0 })
       .sort({ docId: 1 })
       .lean()
       .exec();
