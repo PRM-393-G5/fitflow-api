@@ -8,6 +8,7 @@ import { validateEnv } from './config/env.validation.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { TemplatesModule } from './templates/templates.module.js';
+import { UserDocsModule } from './user-docs/user-docs.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({
@@ -23,6 +24,7 @@ import { UsersModule } from './users/users.module.js';
     JwtConfigModule,
     AuthModule,
     TemplatesModule,
+    UserDocsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
