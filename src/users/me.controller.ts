@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -6,7 +7,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { assertDocData } from '../common/validation/json-body.js';
+import { assertJsonObject } from '../common/validation/json-body.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthUser } from '../auth/jwt-auth.guard.js';
@@ -15,6 +16,12 @@ import { UsersService } from './users.service.js';
 import type { MetaState, UserProfile } from './users.service.js';
 
 const GONE = 'Account no longer exists';
+
+/**
+ * How far ahead of the server clock a client timestamp may be. A device
+ * with a clock years ahead would otherwise win every future meta write.
+ */
+export const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 @Controller('me')
 @UseGuards(JwtAuthGuard)
@@ -47,7 +54,10 @@ export class MeController {
     @CurrentUser() caller: AuthUser,
     @Body() body: PutMetaDto,
   ): Promise<{ applied: boolean } & MetaState> {
-    const meta = assertDocData(body.meta, 'meta');
+    if (body.updatedAt > Date.now() + MAX_CLOCK_SKEW_MS) {
+      throw new BadRequestException('updatedAt is in the future');
+    }
+    const meta = assertJsonObject(body.meta, 'meta');
     const result = await this.users.putMeta(
       caller.userId,
       body.updatedAt,
