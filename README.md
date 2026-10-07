@@ -58,6 +58,9 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | PUT | `/api/me/docs/:kind/:id` | 🔒 Create or replace one document (the app's JSON) → `204` |
 | DELETE | `/api/me/docs/:kind/:id` | 🔒 Soft delete (tombstone) → `204` |
 | GET | `/api/me` | 🔒 Profile `{id, email, name, photoUrl}` of the caller |
+| DELETE | `/api/me` | 🔒 Body `{idToken}` from a Google sign-in of the same account made within the last 5 minutes (`403` otherwise — never `401`, so the app does not mistake it for an expired session) → `204`; deletes the account, every session and its documents |
+| GET | `/api/me/meta` | 🔒 `{updatedAt, meta}` — the app's profile/schedule/onboarding/weekly-goal blob; `meta` is `null` until first written |
+| PUT | `/api/me/meta` | 🔒 Body `{updatedAt, meta}` → `{applied, updatedAt, meta}`; applied only if `updatedAt` (epoch ms) is newer than the stored one, otherwise the newer server copy is returned; `updatedAt` more than 5 minutes ahead of the server clock is `400` |
 
 🔒 = needs `Authorization: Bearer <accessToken>`.
 
