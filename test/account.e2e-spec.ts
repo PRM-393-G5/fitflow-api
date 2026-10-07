@@ -9,9 +9,15 @@ import { UserDoc } from '../src/user-docs/schemas/user-doc.schema.js';
 import { User } from '../src/users/schemas/user.schema.js';
 import { createTestApp } from './helpers.js';
 
-/** Syntactically valid JWTs the fake Google client maps to a `sub`. */
-const tokenFor = (sub: string) =>
-  `eyJhbGciOiJSUzI1NiJ9.${Buffer.from(JSON.stringify({ sub })).toString('base64url')}.c2ln`;
+/**
+ * Syntactically valid JWTs the fake Google client trusts: `sub` and `iat`
+ * (seconds) come from the payload; `invalid` makes verification fail.
+ */
+const tokenFor = (
+  sub: string,
+  { iat = Math.floor(Date.now() / 1000), invalid = false } = {},
+) =>
+  `eyJhbGciOiJSUzI1NiJ9.${Buffer.from(JSON.stringify({ sub, iat, invalid })).toString('base64url')}.c2ln`;
 
 describe('Meta and account (e2e)', () => {
   let app: INestApplication<App>;
@@ -23,12 +29,14 @@ describe('Meta and account (e2e)', () => {
     app = await createTestApp((builder) =>
       builder.overrideProvider(OAuth2Client).useValue({
         verifyIdToken: ({ idToken }: { idToken: string }) => {
-          const sub = JSON.parse(
+          const { sub, iat, invalid } = JSON.parse(
             Buffer.from(idToken.split('.')[1], 'base64url').toString(),
-          ).sub as string;
+          ) as { sub: string; iat: number; invalid: boolean };
+          if (invalid) return Promise.reject(new Error('Token used too late'));
           return Promise.resolve({
             getPayload: () => ({
               sub,
+              iat,
               email: `${sub}@example.com`,
               email_verified: true,
             }),
@@ -142,6 +150,21 @@ describe('Meta and account (e2e)', () => {
       await user.putMeta(payload).expect(400);
     });
 
+    it('rejects timestamps too far in the future', async () => {
+      const user = await signIn('meta-future');
+      await user
+        .putMeta({ updatedAt: Date.now() + 60 * 60 * 1000, meta: {} })
+        .expect(400);
+      await user.putMeta({ updatedAt: Date.now(), meta: {} }).expect(200);
+    });
+
+    it('stores string values that look like field paths verbatim', async () => {
+      const user = await signIn('meta-literal');
+      const tricky = { note: '$metaUpdatedAt', nested: { a: '$$ROOT' } };
+      await user.putMeta({ updatedAt: 1000, meta: tricky }).expect(200);
+      expect((await user.getMeta()).body.meta).toEqual(tricky);
+    });
+
     it('requires an access token', async () => {
       await request(app.getHttpServer()).get('/api/me/meta').expect(401);
     });
@@ -173,6 +196,39 @@ describe('Meta and account (e2e)', () => {
       const user = await signIn('victim');
       await user.deleteAccount(tokenFor('attacker')).expect(403);
       expect(await users.countDocuments({ googleSub: 'victim' })).toBe(1);
+    });
+
+    it('answers 403 (not 401) when Google rejects the token', async () => {
+      const user = await signIn('reauth-invalid');
+      await user
+        .deleteAccount(tokenFor('reauth-invalid', { invalid: true }))
+        .expect(403);
+      expect(await users.countDocuments({ googleSub: 'reauth-invalid' })).toBe(
+        1,
+      );
+    });
+
+    it('requires a recent Google sign-in', async () => {
+      const user = await signIn('reauth-old');
+      const tenMinutesAgo = Math.floor(Date.now() / 1000) - 600;
+      await user
+        .deleteAccount(tokenFor('reauth-old', { iat: tenMinutesAgo }))
+        .expect(403);
+      expect(await users.countDocuments({ googleSub: 'reauth-old' })).toBe(1);
+    });
+
+    it("refuses other devices' writes once deletion has begun", async () => {
+      const user = await signIn('racer');
+      const otherDevice = await signIn('racer');
+      const [deleted, write] = await Promise.all([
+        user.deleteAccount(tokenFor('racer')),
+        otherDevice.putDoc('late'),
+      ]);
+      expect(deleted.status).toBe(204);
+      // Either the write landed before the wipe or it was refused; in
+      // both cases nothing of the account remains.
+      expect([204, 401]).toContain(write.status);
+      expect(await docs.countDocuments()).toBe(0);
     });
 
     it('requires the Google token', async () => {
