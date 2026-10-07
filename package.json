@@ -16,6 +16,7 @@
     "start:prod": "node dist/main",
     "seed": "node dist/seed.js",
     "lint": "oxlint src/ test/",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
