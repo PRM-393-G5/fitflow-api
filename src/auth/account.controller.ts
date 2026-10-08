@@ -1,3 +1,4 @@
+import { ThrottlerGuard } from '@nestjs/throttler';
 import {
   Body,
   Controller,
@@ -13,7 +14,7 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
 import type { AuthUser } from './jwt-auth.guard.js';
 
 @Controller('me')
-@UseGuards(JwtAuthGuard)
+@UseGuards(ThrottlerGuard, JwtAuthGuard)
 export class AccountController {
   constructor(private readonly account: AccountService) {}
 
