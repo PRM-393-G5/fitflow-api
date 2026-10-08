@@ -48,6 +48,13 @@ export class EnvironmentVariables {
   @Min(60)
   ACCESS_TOKEN_TTL_SECONDS: number = 900;
 
+  /**
+   * Comma-separated browser origins allowed by CORS. Empty (default):
+   * CORS stays off — the mobile app does not need it.
+   */
+  @IsString()
+  CORS_ORIGINS: string = '';
+
   /** Refresh token lifetime in days (default 30). */
   @IsInt()
   @Min(1)
