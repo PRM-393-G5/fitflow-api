@@ -90,6 +90,9 @@ export class WorkoutTemplate {
 
   @Prop({ default: 0, index: true })
   order: number;
+
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export type WorkoutTemplateDocument = HydratedDocument<WorkoutTemplate>;

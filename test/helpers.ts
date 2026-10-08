@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModuleBuilder } from '@nestjs/testing';
 import request from 'supertest';
-import { App } from 'supertest/types';
+import type { App } from 'supertest/types.js';
 import { AppModule } from '../src/app.module.js';
 import { APP_OPTIONS, configureApp } from '../src/app.setup.js';
 import { TokensService } from '../src/auth/tokens/tokens.service.js';
