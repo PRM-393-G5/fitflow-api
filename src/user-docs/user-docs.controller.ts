@@ -1,3 +1,4 @@
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   Body,
   Controller,
@@ -25,6 +26,8 @@ import type { SyncedDoc } from './user-docs.service.js';
  * `kind` is `sessions`, `workouts` or `weights`.
  */
 @Controller('me/docs/:kind')
+@ApiTags('sync')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 export class UserDocsController {
   constructor(

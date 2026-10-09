@@ -29,7 +29,9 @@ compiled `dist/seed.js` and needs only `MONGODB_URI`, so it never rebuilds
 `dist/` under a running server. Seed data is fully validated before the
 first write.
 
-Every route lives under `/api`. The app refuses to start when a required
+Every route lives under `/api`. Interactive docs (Swagger UI) are served at
+<http://localhost:3001/api/docs> — sign in via `POST /api/auth/google`, then
+paste the access token into **Authorize**. The app refuses to start when a required
 environment variable is missing or invalid (see `src/config/env.validation.ts`).
 
 | Variable | Default | Purpose |

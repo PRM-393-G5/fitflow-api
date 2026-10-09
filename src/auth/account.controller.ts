@@ -1,3 +1,4 @@
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import {
   Body,
@@ -14,6 +15,8 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
 import type { AuthUser } from './jwt-auth.guard.js';
 
 @Controller('me')
+@ApiTags('me')
+@ApiBearerAuth()
 @UseGuards(ThrottlerGuard, JwtAuthGuard)
 export class AccountController {
   constructor(private readonly account: AccountService) {}

@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
@@ -12,6 +13,7 @@ export interface HealthStatus {
 
 /** Liveness + database reachability, for monitoring and the app's checks. */
 @Controller('health')
+@ApiTags('system')
 export class HealthController {
   constructor(@InjectConnection() private readonly connection: Connection) {}
 

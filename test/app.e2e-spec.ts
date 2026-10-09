@@ -47,6 +47,23 @@ describe('App (e2e)', () => {
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
   });
 
+  it('serves the OpenAPI document with every route', async () => {
+    const { body } = await request(app.getHttpServer())
+      .get('/api/docs-json')
+      .expect(200);
+    expect(Object.keys(body.paths)).toEqual(
+      expect.arrayContaining([
+        '/api/auth/google',
+        '/api/me',
+        '/api/me/meta',
+        '/api/me/docs/{kind}',
+        '/api/me/docs/{kind}/{id}',
+        '/api/templates',
+      ]),
+    );
+    await request(app.getHttpServer()).get('/api/docs').expect(200);
+  });
+
   it('caps ordinary JSON bodies at 100 kB', async () => {
     await request(app.getHttpServer())
       .post('/api/auth/refresh')
