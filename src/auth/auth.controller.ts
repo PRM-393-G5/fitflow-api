@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import {
   Body,
@@ -14,6 +15,7 @@ import { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import type { TokenPair } from './tokens/tokens.service.js';
 
 @Controller('auth')
+@ApiTags('auth')
 @UseGuards(ThrottlerGuard)
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
