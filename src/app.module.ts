@@ -5,6 +5,7 @@ import { AppService } from './app.service.js';
 import { AuthModule } from './auth/auth.module.js';
 import { JwtConfigModule } from './auth/tokens/jwt-config.module.js';
 import { validateEnv } from './config/env.validation.js';
+import { ThrottlingModule } from './common/throttling/throttling.module.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { TemplatesModule } from './templates/templates.module.js';
@@ -19,6 +20,7 @@ import { UsersModule } from './users/users.module.js';
       validate: validateEnv,
     }),
     DatabaseModule,
+    ThrottlingModule,
     HealthModule,
     UsersModule,
     JwtConfigModule,

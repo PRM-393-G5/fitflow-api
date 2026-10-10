@@ -48,6 +48,11 @@ export class EnvironmentVariables {
   @Min(60)
   ACCESS_TOKEN_TTL_SECONDS: number = 900;
 
+  /** Requests per minute per client IP on the /auth routes and DELETE /me. */
+  @IsInt()
+  @Min(1)
+  AUTH_RATE_LIMIT: number = 20;
+
   /**
    * Comma-separated browser origins allowed by CORS. Empty (default):
    * CORS stays off — the mobile app does not need it.
