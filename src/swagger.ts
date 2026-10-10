@@ -1,7 +1,13 @@
 import { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
-/** Interactive API docs at /api/docs (JSON at /api/docs-json). */
+/** Path of the Swagger UI (JSON at `${DOCS_PATH}-json`). */
+export const DOCS_PATH = 'api/docs';
+
+/**
+ * Interactive API docs at /api/docs (JSON at /api/docs-json). Building the
+ * document scans every route, so it only happens when docs are enabled.
+ */
 export function setupSwagger(app: INestApplication) {
   const config = new DocumentBuilder()
     .setTitle('FitFlow API')
@@ -14,7 +20,7 @@ export function setupSwagger(app: INestApplication) {
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document, {
-    jsonDocumentUrl: 'api/docs-json',
+  SwaggerModule.setup(DOCS_PATH, app, document, {
+    jsonDocumentUrl: `${DOCS_PATH}-json`,
   });
 }
