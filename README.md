@@ -29,7 +29,8 @@ compiled `dist/seed.js` and needs only `MONGODB_URI`, so it never rebuilds
 `dist/` under a running server. Seed data is fully validated before the
 first write.
 
-Every route lives under `/api`. Interactive docs (Swagger UI) are served at
+Every route lives under `/api`. Interactive docs (Swagger UI, off in
+production unless `SWAGGER_ENABLED=true`) are served at
 <http://localhost:3001/api/docs> — sign in via `POST /api/auth/google`, then
 paste the access token into **Authorize**. The app refuses to start when a required
 environment variable is missing or invalid (see `src/config/env.validation.ts`).
@@ -43,8 +44,10 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | `JWT_ACCESS_SECRET` | — (required, ≥ 32 chars) | HMAC secret for access tokens |
 | `ACCESS_TOKEN_TTL_SECONDS` | `900` | Access token lifetime |
 | `REFRESH_TOKEN_TTL_DAYS` | `30` | Refresh token lifetime |
-| `AUTH_RATE_LIMIT` | `20` | Requests per minute per client IP on `/api/auth/*` and `DELETE /api/me` (`429` beyond) |
-| `CORS_ORIGINS` | empty (CORS off) | Comma-separated browser origins allowed to call the API; the mobile app needs none |
+| `AUTH_RATE_LIMIT` | `20` | Requests per minute per client IP, shared across `/api/auth/*` and `DELETE /api/me` (`429` beyond) |
+| `TRUST_PROXY_HOPS` | `0` | Reverse proxies in front of the API; set it when deployed behind one so rate limits see the real client IP |
+| `SWAGGER_ENABLED` | on, except `NODE_ENV=production` | Serve Swagger UI at `/api/docs` |
+| `CORS_ORIGINS` | empty (CORS off) | Comma-separated exact browser origins (`https://host[:port]`, no path or `*`) allowed to call the API; the mobile app needs none |
 | `MONGODB_TEST_URI` | local `fitflow-test` DB | Database used by the test suites (never the dev DB); export it in the shell — `.env` is not read for it |
 
 ## Endpoints
