@@ -3,7 +3,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { OAuth2Client } from 'google-auth-library';
 import type { Model } from 'mongoose';
 import request from 'supertest';
-import { App } from 'supertest/types';
+import type { App } from 'supertest/types.js';
 import { RefreshToken } from '../src/auth/tokens/refresh-token.schema.js';
 import { UserDoc } from '../src/user-docs/schemas/user-doc.schema.js';
 import { User } from '../src/users/schemas/user.schema.js';

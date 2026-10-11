@@ -10,9 +10,12 @@ import { Error as MongooseError, mongo } from 'mongoose';
 import { AllExceptionsFilter, reasonPhrase } from './all-exceptions.filter.js';
 
 function run(exception: unknown, headersSent = false) {
-  const json = vi.fn();
+  const json = vi.fn<(body: Record<string, unknown>) => void>();
   const end = vi.fn();
-  const status = vi.fn(() => ({ json }));
+  const status = vi.fn((code: number) => {
+    void code;
+    return { json };
+  });
   const host = {
     switchToHttp: () => ({
       getRequest: () => ({ method: 'GET', originalUrl: '/api/x' }),
