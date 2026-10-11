@@ -23,7 +23,7 @@ import type { SyncedDoc } from './user-docs.service.js';
 
 /**
  * The caller's synced documents (replaces Firestore `users/{uid}/{kind}`).
- * `kind` is `sessions`, `workouts` or `weights`.
+ * `kind` is `sessions`, `workouts`, `weights` or `foodDays`.
  */
 @Controller('me/docs/:kind')
 @ApiTags('sync')
