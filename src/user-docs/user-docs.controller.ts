@@ -17,12 +17,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthUser } from '../auth/jwt-auth.guard.js';
 import { assertJsonObject } from '../common/validation/json-body.js';
 import { assertDocList } from './dto/doc-body.js';
-import {
-  DocParams,
-  KindParams,
-  ListQuery,
-  assertIdForKind,
-} from './dto/doc-params.dto.js';
+import { DocParams, KindParams, parseSince } from './dto/doc-params.dto.js';
 import { UsersService } from '../users/users.service.js';
 import { UserDocsService } from './user-docs.service.js';
 import type { SyncedDoc } from './user-docs.service.js';
@@ -53,15 +48,21 @@ export class UserDocsController {
 
   /**
    * All documents of the kind; deleted ones as `{id, deleted: true}`.
-   * `?since=yyyy-mm-dd` keeps ids sorting at or after that day (meals).
+   * `?since=yyyy-mm-dd` keeps ids from that day on (date-keyed kinds,
+   * i.e. meals); tombstones older than it are not returned either. Other
+   * query parameters are ignored.
    */
   @Get()
   list(
     @CurrentUser() caller: AuthUser,
     @Param() params: KindParams,
-    @Query() query: ListQuery,
+    @Query('since') since?: string,
   ): Promise<SyncedDoc[]> {
-    return this.docs.list(caller.userId, params.kind, query.since);
+    return this.docs.list(
+      caller.userId,
+      params.kind,
+      parseSince(params.kind, since),
+    );
   }
 
   /** Bulk upsert: body `{docs: [{id, …}, …]}` (at most 500). */
@@ -85,7 +86,6 @@ export class UserDocsController {
     @Param() params: DocParams,
     @Body() body: unknown,
   ): Promise<void> {
-    assertIdForKind(params.kind, params.id);
     const data = assertJsonObject(body);
     await this.requireAccount(caller);
     await this.docs.upsertMany(caller.userId, params.kind, [
@@ -100,7 +100,6 @@ export class UserDocsController {
     @CurrentUser() caller: AuthUser,
     @Param() params: DocParams,
   ): Promise<void> {
-    assertIdForKind(params.kind, params.id);
     await this.requireAccount(caller);
     await this.docs.tombstone(caller.userId, params.kind, params.id);
   }
