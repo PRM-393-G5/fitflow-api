@@ -115,23 +115,55 @@ describe('User docs (e2e)', () => {
     );
   });
 
-  it('syncs food-log days keyed by date', async () => {
-    const day = {
-      id: '2026-10-16',
-      meals: [
-        {
-          label: 'Lunch',
-          items: [{ name: 'Mi Quang', kcal: 550, proteinG: 26 }],
-        },
-      ],
-    };
-    await alice.put('/api/me/docs/foodDays/2026-10-16', day).expect(204);
-    await alice.delete('/api/me/docs/foodDays/2026-10-15').expect(204);
-    const { body } = await alice.get('/api/me/docs/foodDays').expect(200);
-    expect(body).toEqual([{ id: '2026-10-15', deleted: true }, day]);
-    expect((await bob.get('/api/me/docs/foodDays').expect(200)).body).toEqual(
-      [],
-    );
+  describe('meals', () => {
+    const meal = (id: string, kcal: number) => ({
+      id,
+      label: 'Lunch',
+      items: [{ name: 'Mi Quang', kcal, proteinG: 26 }],
+    });
+
+    it('bulk-upserts, tombstones and revives meal entries', async () => {
+      const lunch = meal('2026-10-16:a1', 550);
+      const dinner = meal('2026-10-16:b2', 620);
+      await alice
+        .put('/api/me/docs/meals', { docs: [lunch, dinner] })
+        .expect(204);
+      await alice.delete('/api/me/docs/meals/2026-10-16:a1').expect(204);
+      let list = await alice.get('/api/me/docs/meals').expect(200);
+      expect(list.body).toEqual([
+        { id: '2026-10-16:a1', deleted: true },
+        dinner,
+      ]);
+
+      // Re-logged from another device: the entry comes back.
+      await alice.put('/api/me/docs/meals/2026-10-16:a1', lunch).expect(204);
+      list = await alice.get('/api/me/docs/meals').expect(200);
+      expect(list.body).toEqual([lunch, dinner]);
+      expect((await bob.get('/api/me/docs/meals').expect(200)).body).toEqual(
+        [],
+      );
+    });
+
+    it('rejects ids that are not day-prefixed', async () => {
+      await alice.put('/api/me/docs/meals/lunch', meal('x', 1)).expect(400);
+      await alice.delete('/api/me/docs/meals/2026-10-5:x').expect(400);
+      await alice
+        .put('/api/me/docs/meals', { docs: [meal('2026-10-16', 1)] })
+        .expect(400);
+    });
+
+    it('lists only entries since a day', async () => {
+      await alice
+        .put('/api/me/docs/meals', {
+          docs: [meal('2026-09-01:old', 400), meal('2026-10-16:new', 500)],
+        })
+        .expect(204);
+      const { body } = await alice
+        .get('/api/me/docs/meals?since=2026-10-01')
+        .expect(200);
+      expect(body).toEqual([meal('2026-10-16:new', 500)]);
+      await alice.get('/api/me/docs/meals?since=yesterday').expect(400);
+    });
   });
 
   it('refuses writes once the account is deleted', async () => {
