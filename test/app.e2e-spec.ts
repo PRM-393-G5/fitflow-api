@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { App } from 'supertest/types';
+import type { App } from 'supertest/types.js';
 import { createTestApp } from './helpers.js';
 
 describe('App (e2e)', () => {
@@ -35,6 +35,20 @@ describe('App (e2e)', () => {
       .send('{bad json')
       .expect(400);
     expect(res.body).toMatchObject({ statusCode: 400, error: 'Bad Request' });
+  });
+
+  it('sends security headers and no CORS headers by default', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api')
+      .set('Origin', 'https://evil.example')
+      .expect(200);
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['x-powered-by']).toBeUndefined();
+    expect(res.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('serves no Swagger UI when disabled', async () => {
+    await request(app.getHttpServer()).get('/api/docs-json').expect(404);
   });
 
   it('caps ordinary JSON bodies at 100 kB', async () => {
