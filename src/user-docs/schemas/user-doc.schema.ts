@@ -2,12 +2,13 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, Schema as MongooseSchema, Types } from 'mongoose';
 
 /** Per-user collections the app syncs (were `users/{uid}/{kind}`). */
-export const DOC_KINDS = ['sessions', 'workouts', 'weights'] as const;
+export const DOC_KINDS = ['sessions', 'workouts', 'weights', 'meals'] as const;
 export type DocKind = (typeof DOC_KINDS)[number];
 
 /**
- * One synced document: a workout session, custom workout or body-weight
- * entry, stored as the app's JSON in `data`. Deletes are soft
+ * One synced document: a workout session, custom workout, body-weight
+ * entry or one logged meal (`meals`, id `yyyy-mm-dd:<entry>`), stored as
+ * the app's JSON in `data`. Deletes are soft
  * (`deleted: true`, empty `data`) so another device's merge cannot
  * resurrect the document.
  */

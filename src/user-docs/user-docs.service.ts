@@ -18,10 +18,21 @@ export class UserDocsService implements OnModuleInit {
     await this.docs.createIndexes();
   }
 
-  /** Every document of [kind], tombstones included. */
-  async list(userId: string, kind: DocKind): Promise<SyncedDoc[]> {
+  /**
+   * Every document of [kind], tombstones included; with [since] (only
+   * for date-keyed kinds), only ids from that day on.
+   */
+  async list(
+    userId: string,
+    kind: DocKind,
+    since?: string,
+  ): Promise<SyncedDoc[]> {
     const docs = await this.docs
-      .find({ userId: new Types.ObjectId(userId), kind })
+      .find({
+        userId: new Types.ObjectId(userId),
+        kind,
+        ...(since ? { docId: { $gte: since } } : {}),
+      })
       .select({ docId: 1, data: 1, deleted: 1, _id: 0 })
       .sort({ docId: 1 })
       .lean()

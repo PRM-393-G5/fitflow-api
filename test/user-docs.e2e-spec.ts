@@ -115,6 +115,80 @@ describe('User docs (e2e)', () => {
     );
   });
 
+  describe('meals', () => {
+    const meal = (id: string, kcal: number) => ({
+      id,
+      label: 'Lunch',
+      items: [{ name: 'Mi Quang', kcal, proteinG: 26 }],
+    });
+
+    it('bulk-upserts, tombstones and revives meal entries', async () => {
+      const lunch = meal('2026-10-16:a1', 550);
+      const dinner = meal('2026-10-16:b2', 620);
+      await alice
+        .put('/api/me/docs/meals', { docs: [lunch, dinner] })
+        .expect(204);
+      await alice.delete('/api/me/docs/meals/2026-10-16:a1').expect(204);
+      let list = await alice.get('/api/me/docs/meals').expect(200);
+      expect(list.body).toEqual([
+        { id: '2026-10-16:a1', deleted: true },
+        dinner,
+      ]);
+
+      // Re-logged from another device: the entry comes back.
+      await alice.put('/api/me/docs/meals/2026-10-16:a1', lunch).expect(204);
+      list = await alice.get('/api/me/docs/meals').expect(200);
+      expect(list.body).toEqual([lunch, dinner]);
+      expect((await bob.get('/api/me/docs/meals').expect(200)).body).toEqual(
+        [],
+      );
+    });
+
+    it('rejects ids that are not day-prefixed', async () => {
+      await alice.put('/api/me/docs/meals/lunch', meal('x', 1)).expect(400);
+      await alice
+        .put('/api/me/docs/meals/2026-13-45:x', meal('x', 1))
+        .expect(400);
+      await alice.delete('/api/me/docs/meals/2026-10-5:x').expect(400);
+      await alice
+        .put('/api/me/docs/meals', { docs: [meal('2026-10-16', 1)] })
+        .expect(400);
+    });
+
+    it('lists only entries since a day, tombstones included', async () => {
+      await alice
+        .put('/api/me/docs/meals', {
+          docs: [
+            meal('2026-09-01:old', 400),
+            meal('2026-10-16:new', 500),
+            meal('2026-10-17:gone', 300),
+          ],
+        })
+        .expect(204);
+      await alice.delete('/api/me/docs/meals/2026-10-17:gone').expect(204);
+      await alice.delete('/api/me/docs/meals/2026-09-01:old').expect(204);
+      const { body } = await alice
+        .get('/api/me/docs/meals?since=2026-10-01')
+        .expect(200);
+      // The old tombstone is outside the window (the app keeps no data
+      // from before it either); the newer one is returned.
+      expect(body).toEqual([
+        meal('2026-10-16:new', 500),
+        { id: '2026-10-17:gone', deleted: true },
+      ]);
+      await alice.get('/api/me/docs/meals?since=yesterday').expect(400);
+      await alice.get('/api/me/docs/meals?since=2026-02-30').expect(400);
+    });
+
+    it('refuses since for kinds whose ids are not dates', async () => {
+      await alice.get('/api/me/docs/workouts?since=2026-10-01').expect(400);
+    });
+
+    it('ignores unrelated query parameters', async () => {
+      await alice.get('/api/me/docs/sessions?_=1697').expect(200);
+    });
+  });
+
   it('refuses writes once the account is deleted', async () => {
     const ghost = await signedInUser(app, 'ghost');
     await app
