@@ -109,3 +109,24 @@ describe('splitList', () => {
     expect(splitList(' a, b ,,c ')).toEqual(['a', 'b', 'c']);
   });
 });
+
+describe('validateEnv OpenAI settings', () => {
+  it('defaults OPENAI_MODEL and OPENAI_BASE_URL when OPENAI_API_KEY is unset', () => {
+    const env = validateEnv(required);
+    expect(env.OPENAI_API_KEY).toBe('');
+    expect(env.OPENAI_MODEL).toBe('gpt-6-luna');
+    expect(env.OPENAI_BASE_URL).toBe('https://api.openai.com/v1');
+  });
+
+  it('accepts custom OpenAI settings', () => {
+    const env = validateEnv({
+      ...required,
+      OPENAI_API_KEY: 'sk-test-key',
+      OPENAI_MODEL: 'gpt-4o-mini',
+      OPENAI_BASE_URL: 'http://127.0.0.1:4100/v1',
+    });
+    expect(env.OPENAI_API_KEY).toBe('sk-test-key');
+    expect(env.OPENAI_MODEL).toBe('gpt-4o-mini');
+    expect(env.OPENAI_BASE_URL).toBe('http://127.0.0.1:4100/v1');
+  });
+});
