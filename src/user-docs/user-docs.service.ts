@@ -19,8 +19,8 @@ export class UserDocsService implements OnModuleInit {
   }
 
   /**
-   * Every document of [kind], tombstones included; with [since], only
-   * ids sorting at or after it (date-prefixed ids sort by day).
+   * Every document of [kind], tombstones included; with [since] (only
+   * for date-keyed kinds), only ids from that day on.
    */
   async list(
     userId: string,
