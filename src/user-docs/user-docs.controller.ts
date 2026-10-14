@@ -8,6 +8,7 @@ import {
   HttpStatus,
   Param,
   Put,
+  Query,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
@@ -16,14 +17,14 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthUser } from '../auth/jwt-auth.guard.js';
 import { assertJsonObject } from '../common/validation/json-body.js';
 import { assertDocList } from './dto/doc-body.js';
-import { DocParams, KindParams } from './dto/doc-params.dto.js';
+import { DocParams, KindParams, parseSince } from './dto/doc-params.dto.js';
 import { UsersService } from '../users/users.service.js';
 import { UserDocsService } from './user-docs.service.js';
 import type { SyncedDoc } from './user-docs.service.js';
 
 /**
  * The caller's synced documents (replaces Firestore `users/{uid}/{kind}`).
- * `kind` is `sessions`, `workouts` or `weights`.
+ * `kind` is `sessions`, `workouts`, `weights` or `meals`.
  */
 @Controller('me/docs/:kind')
 @ApiTags('sync')
@@ -45,13 +46,23 @@ export class UserDocsController {
     }
   }
 
-  /** All documents of the kind; deleted ones as `{id, deleted: true}`. */
+  /**
+   * All documents of the kind; deleted ones as `{id, deleted: true}`.
+   * `?since=yyyy-mm-dd` keeps ids from that day on (date-keyed kinds,
+   * i.e. meals); tombstones older than it are not returned either. Other
+   * query parameters are ignored.
+   */
   @Get()
   list(
     @CurrentUser() caller: AuthUser,
     @Param() params: KindParams,
+    @Query('since') since?: string,
   ): Promise<SyncedDoc[]> {
-    return this.docs.list(caller.userId, params.kind);
+    return this.docs.list(
+      caller.userId,
+      params.kind,
+      parseSince(params.kind, since),
+    );
   }
 
   /** Bulk upsert: body `{docs: [{id, …}, …]}` (at most 500). */
@@ -62,7 +73,7 @@ export class UserDocsController {
     @Param() params: KindParams,
     @Body() body: unknown,
   ): Promise<void> {
-    const docs = assertDocList(body);
+    const docs = assertDocList(body, params.kind);
     await this.requireAccount(caller);
     await this.docs.upsertMany(caller.userId, params.kind, docs);
   }
