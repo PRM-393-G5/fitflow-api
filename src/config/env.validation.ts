@@ -79,6 +79,20 @@ export class EnvironmentVariables {
   @IsInt()
   @Min(1)
   REFRESH_TOKEN_TTL_DAYS: number = 30;
+
+  /** OpenAI API key used by the /api/ai endpoints; empty disables AI features. */
+  @IsString()
+  OPENAI_API_KEY: string = '';
+
+  /** OpenAI model for structured JSON completions (default gpt-6-luna). */
+  @IsString()
+  @IsNotEmpty()
+  OPENAI_MODEL: string = 'gpt-6-luna';
+
+  /** OpenAI API base URL (overridable in tests or for compatible gateways). */
+  @IsString()
+  @IsNotEmpty()
+  OPENAI_BASE_URL: string = 'https://api.openai.com/v1';
 }
 
 /** Splits a comma-separated variable, dropping blanks. */
