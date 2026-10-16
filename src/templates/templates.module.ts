@@ -4,6 +4,7 @@ import {
   WorkoutTemplate,
   WorkoutTemplateSchema,
 } from './schemas/workout-template.schema.js';
+import { TemplatesController } from './templates.controller.js';
 import { TemplatesService } from './templates.service.js';
 
 @Module({
@@ -12,6 +13,7 @@ import { TemplatesService } from './templates.service.js';
       { name: WorkoutTemplate.name, schema: WorkoutTemplateSchema },
     ]),
   ],
+  controllers: [TemplatesController],
   providers: [TemplatesService],
   exports: [TemplatesService],
 })
