@@ -24,36 +24,22 @@ export class TemplatesService {
     private readonly templates: Model<WorkoutTemplate>,
   ) {}
 
-  /** All templates in display order. */
+  /**
+   * All templates in display order. Documents are hydrated (not lean) so
+   * schema defaults fill fields missing from older documents, and the
+   * schema's toJSON gives the app's shape.
+   */
   async findAll(): Promise<TemplateJson[]> {
-    const docs = await this.templates
-      .find()
-      .sort({ order: 1, _id: 1 })
-      .lean()
-      .exec();
-    return docs.map((doc) => ({
-      id: doc._id,
-      name: doc.name,
-      durationMinutes: doc.durationMinutes,
-      level: doc.level,
-      category: doc.category,
-      description: doc.description,
-      exercises: doc.exercises.map((exercise) => ({
-        id: exercise.id,
-        name: exercise.name,
-        muscleGroup: exercise.muscleGroup,
-        sets: exercise.sets,
-        reps: exercise.reps,
-        durationSeconds: exercise.durationSeconds,
-        restSeconds: exercise.restSeconds,
-        weightKg: exercise.weightKg,
-      })),
-    }));
+    const docs = await this.templates.find().sort({ order: 1, _id: 1 }).exec();
+    return docs.map((doc) => doc.toJSON() as unknown as TemplateJson);
   }
 
   /**
-   * Makes the collection match [templates] exactly: upserts each one (its
-   * position becomes `order`) and deletes templates no longer listed.
+   * Makes the collection match [templates]: upserts each one (its position
+   * becomes `order`) and deletes templates no longer listed. Everything is
+   * validated before the first write, so bad seed data changes nothing.
+   * The writes themselves are not one transaction (a standalone MongoDB
+   * has none): a reader may briefly see new and stale templates together.
    */
   async replaceAll(
     templates: TemplateJson[],
@@ -62,15 +48,25 @@ export class TemplatesService {
     if (new Set(ids).size !== ids.length) {
       throw new Error('Template ids must be unique');
     }
-    if (templates.length > 0) {
+    const docs = templates.map(
+      ({ id, ...template }, order) =>
+        new this.templates({ _id: id, ...template, order }),
+    );
+    await Promise.all(docs.map((doc) => doc.validate()));
+
+    if (docs.length > 0) {
       await this.templates.bulkWrite(
-        templates.map(({ id, ...template }, order) => ({
-          replaceOne: {
-            filter: { _id: id },
-            replacement: { _id: id, ...template, order },
-            upsert: true,
-          },
-        })),
+        docs.map((doc) => {
+          const { _id, ...fields } = doc.toObject({ versionKey: false });
+          // $set (not a replacement) keeps createdAt on re-seeds.
+          return {
+            updateOne: {
+              filter: { _id },
+              update: { $set: fields },
+              upsert: true,
+            },
+          };
+        }),
       );
     }
     const { deletedCount } = await this.templates
