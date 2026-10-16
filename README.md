@@ -54,7 +54,7 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | POST | `/api/auth/logout` | Body `{refreshToken}` → `204`; revokes that session's refresh tokens |
 | GET | `/api/templates` | Built-in workout plans in display order (`Cache-Control: public, max-age=300`), in the app's `Workout` JSON shape (`id`, `name`, `durationMinutes`, `level`, `category`, `description`, `exercises`) |
 | GET | `/api/me/docs/:kind` | 🔒 All synced documents of `kind` (`sessions`, `workouts`, `weights`); deleted ones as `{id, deleted: true}` |
-| PUT | `/api/me/docs/:kind` | 🔒 Bulk upsert, body `{docs: [{id, …}]}` (≤ 500, ≤ 2 MB) → `204` |
+| PUT | `/api/me/docs/:kind` | 🔒 Bulk upsert, body `{docs: [{id, …}]}` (≤ 500, ≤ 2 MB; other routes accept ≤ 100 kB) → `204` |
 | PUT | `/api/me/docs/:kind/:id` | 🔒 Create or replace one document (the app's JSON) → `204` |
 | DELETE | `/api/me/docs/:kind/:id` | 🔒 Soft delete (tombstone) → `204` |
 | GET | `/api/me` | 🔒 Profile `{id, email, name, photoUrl}` of the caller |
@@ -66,7 +66,10 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 Documents are the app's own JSON (`WorkoutSession`, `Workout`,
 `BodyWeightEntry`), stored as-is. Ids must match `[A-Za-z0-9_.:-]{1,128}`
 and field names may not start with `$` or contain `.`. A `PUT` after a
-`DELETE` revives the document.
+`DELETE` revives the document — the same last-write-wins semantics the app
+had with Firestore (it needs this: a body-weight entry deleted and logged
+again on the same day reuses its `yyyy-mm-dd` id). Writes for a deleted
+account are refused with `401`.
 
 ### Sessions
 

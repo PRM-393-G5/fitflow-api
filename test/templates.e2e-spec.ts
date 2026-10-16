@@ -1,14 +1,12 @@
 import { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { WorkoutTemplate } from '../src/templates/schemas/workout-template.schema.js';
-import { AppModule } from '../src/app.module.js';
-import { configureApp } from '../src/app.setup.js';
 import { WORKOUT_TEMPLATES } from '../src/templates/seed/workout-templates.seed.js';
 import { TemplatesService } from '../src/templates/templates.service.js';
+import { createTestApp } from './helpers.js';
 
 describe('Templates (e2e)', () => {
   let app: INestApplication<App>;
@@ -16,14 +14,9 @@ describe('Templates (e2e)', () => {
   let model: Model<WorkoutTemplate>;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-    app = moduleRef.createNestApplication();
-    configureApp(app);
-    await app.init();
-    templates = moduleRef.get(TemplatesService);
-    model = moduleRef.get(getModelToken(WorkoutTemplate.name));
+    app = await createTestApp();
+    templates = app.get(TemplatesService);
+    model = app.get(getModelToken(WorkoutTemplate.name));
   });
 
   afterAll(async () => {

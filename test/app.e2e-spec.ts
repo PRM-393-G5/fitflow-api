@@ -1,21 +1,13 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module.js';
-import { configureApp } from './../src/app.setup.js';
+import { createTestApp } from './helpers.js';
 
 describe('App (e2e)', () => {
   let app: INestApplication<App>;
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
-    app = moduleFixture.createNestApplication();
-    configureApp(app);
-    await app.init();
+    app = await createTestApp();
   });
 
   afterAll(async () => {
@@ -43,6 +35,13 @@ describe('App (e2e)', () => {
       .send('{bad json')
       .expect(400);
     expect(res.body).toMatchObject({ statusCode: 400, error: 'Bad Request' });
+  });
+
+  it('caps ordinary JSON bodies at 100 kB', async () => {
+    await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .send({ refreshToken: 'x'.repeat(200 * 1024) })
+      .expect(413);
   });
 
   it('serves nothing outside the /api prefix', () => {
