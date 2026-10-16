@@ -55,6 +55,7 @@ export class GoogleVerifier {
       email: payload.email,
       name: payload.name,
       photoUrl: payload.picture,
+      issuedAt: payload.iat,
     };
   }
 }

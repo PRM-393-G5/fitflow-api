@@ -9,6 +9,15 @@ export interface GoogleProfile {
   email: string;
   name?: string;
   photoUrl?: string;
+  /** When Google issued the ID token (epoch seconds). */
+  issuedAt?: number;
+}
+
+/** The app's profile/schedule/onboarding blob and its client timestamp. */
+export interface MetaState {
+  /** Epoch milliseconds of the last accepted write; 0 = never written. */
+  updatedAt: number;
+  meta: Record<string, unknown> | null;
 }
 
 /** What the API exposes about a user. */
@@ -88,6 +97,58 @@ export class UsersService implements OnModuleInit {
     if (!isObjectIdOrHexString(id)) return false;
     const result = await this.users.deleteOne({ _id: id }).exec();
     return result.deletedCount === 1;
+  }
+
+  /** The stored meta blob, or null when the account no longer exists. */
+  async getMeta(id: string): Promise<MetaState | null> {
+    const user = await this.findById(id);
+    if (!user) return null;
+    return {
+      updatedAt: user.metaUpdatedAt,
+      meta: user.metaUpdatedAt > 0 ? user.meta : null,
+    };
+  }
+
+  /**
+   * Last-write-wins: stores [meta] only if [updatedAt] is newer than the
+   * stored timestamp. One atomic pipeline update both decides and writes,
+   * and returns the previous state, so the reported winner is exactly the
+   * state this write lost to. Null if the account no longer exists.
+   */
+  async putMeta(
+    id: string,
+    updatedAt: number,
+    meta: Record<string, unknown>,
+  ): Promise<{ applied: boolean; state: MetaState } | null> {
+    if (!isObjectIdOrHexString(id)) return null;
+    const newer = { $lt: ['$metaUpdatedAt', updatedAt] };
+    const before = await this.users
+      .findOneAndUpdate(
+        { _id: id },
+        [
+          {
+            $set: {
+              // $literal: string values like "$x" must not be read as paths.
+              meta: { $cond: [newer, { $literal: meta }, '$meta'] },
+              metaUpdatedAt: { $max: ['$metaUpdatedAt', updatedAt] },
+            },
+          },
+        ],
+        { returnDocument: 'before', updatePipeline: true },
+      )
+      .lean()
+      .exec();
+    if (!before) return null;
+    if (before.metaUpdatedAt < updatedAt) {
+      return { applied: true, state: { updatedAt, meta } };
+    }
+    return {
+      applied: false,
+      state: {
+        updatedAt: before.metaUpdatedAt,
+        meta: before.metaUpdatedAt > 0 ? before.meta : null,
+      },
+    };
   }
 
   static toProfile(user: UserDocument): UserProfile {

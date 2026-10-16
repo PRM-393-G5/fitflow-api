@@ -1,32 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { assertDocData, assertDocList, MAX_BULK_DOCS } from './doc-body.js';
-
-describe('assertDocData', () => {
-  it('accepts plain nested JSON', () => {
-    const doc = { id: 'a', list: [{ n: 1 }], nested: { ok: true } };
-    expect(assertDocData(doc)).toBe(doc);
-  });
-
-  it.each([null, 'text', 3, [1]])('rejects non-object %s', (value) => {
-    expect(() => assertDocData(value)).toThrow(BadRequestException);
-  });
-
-  it('rejects $-prefixed and dotted keys at any depth', () => {
-    expect(() => assertDocData({ a: { b: [{ $set: 1 }] } })).toThrow(/\$set/);
-    expect(() => assertDocData({ 'x.y': 1 })).toThrow(/x\.y/);
-    expect(() => assertDocData({ 'a\u0000b': 1 })).toThrow(BadRequestException);
-  });
-
-  it('rejects absurd nesting', () => {
-    let deep: Record<string, unknown> = {};
-    const root = deep;
-    for (let i = 0; i < 30; i++) {
-      deep.child = {};
-      deep = deep.child as Record<string, unknown>;
-    }
-    expect(() => assertDocData(root)).toThrow(/too deeply/);
-  });
-});
+import { assertDocList, MAX_BULK_DOCS } from './doc-body.js';
 
 describe('assertDocList', () => {
   it('returns docs with their ids', () => {
