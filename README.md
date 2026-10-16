@@ -106,6 +106,7 @@ Every error uses the same body:
 
 ```sh
 npm run lint
+npm run typecheck   # src and tests
 npx prettier --check "src/**/*.ts" "test/**/*.ts"
 npm test           # unit tests (Vitest)
 npm run test:e2e   # HTTP + MongoDB integration tests (needs MongoDB running;
