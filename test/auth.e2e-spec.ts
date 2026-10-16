@@ -1,15 +1,13 @@
 import { INestApplication, Logger } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
-import { Test } from '@nestjs/testing';
 import type { Model } from 'mongoose';
 import request from 'supertest';
 import { App } from 'supertest/types';
-import { AppModule } from '../src/app.module.js';
-import { configureApp } from '../src/app.setup.js';
 import { OAuth2Client } from 'google-auth-library';
 import { RefreshToken } from '../src/auth/tokens/refresh-token.schema.js';
 import { REUSE_GRACE_MS } from '../src/auth/tokens/tokens.service.js';
 import { User } from '../src/users/schemas/user.schema.js';
+import { createTestApp } from './helpers.js';
 
 /** Syntactically valid JWTs; the fake Google client decides which is "good". */
 const GOOD_TOKEN = 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJnb29kIn0.c2ln';
@@ -21,34 +19,32 @@ describe('Auth (e2e)', () => {
   let refreshTokens: Model<RefreshToken>;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      // Only Google's network call is faked: the real GoogleVerifier runs,
-      // including the audience parsed from GOOGLE_CLIENT_IDS.
-      .overrideProvider(OAuth2Client)
-      .useValue({
-        verifyIdToken: (options: { idToken: string; audience: string[] }) => {
-          const audienceOk = options.audience.includes(
-            process.env.GOOGLE_CLIENT_IDS!,
-          );
-          if (options.idToken !== GOOD_TOKEN || !audienceOk) {
-            return Promise.reject(new Error('Wrong recipient'));
-          }
-          return Promise.resolve({
-            getPayload: () => ({
-              sub: 'google-e2e',
-              email: 'e2e@example.com',
-              email_verified: true,
-              name: 'E2E',
-            }),
-          });
-        },
-      })
-      .compile();
-    app = moduleRef.createNestApplication();
-    configureApp(app);
-    await app.init();
-    users = moduleRef.get(getModelToken(User.name));
-    refreshTokens = moduleRef.get(getModelToken(RefreshToken.name));
+    app = await createTestApp((builder) =>
+      builder
+        // Only Google's network call is faked: the real GoogleVerifier runs,
+        // including the audience parsed from GOOGLE_CLIENT_IDS.
+        .overrideProvider(OAuth2Client)
+        .useValue({
+          verifyIdToken: (options: { idToken: string; audience: string[] }) => {
+            const audienceOk = options.audience.includes(
+              process.env.GOOGLE_CLIENT_IDS!,
+            );
+            if (options.idToken !== GOOD_TOKEN || !audienceOk) {
+              return Promise.reject(new Error('Wrong recipient'));
+            }
+            return Promise.resolve({
+              getPayload: () => ({
+                sub: 'google-e2e',
+                email: 'e2e@example.com',
+                email_verified: true,
+                name: 'E2E',
+              }),
+            });
+          },
+        }),
+    );
+    users = app.get(getModelToken(User.name));
+    refreshTokens = app.get(getModelToken(RefreshToken.name));
   });
 
   beforeEach(async () => {
