@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { json } from 'express';
 import helmet from 'helmet';
 import { EnvironmentVariables, splitList } from './config/env.validation.js';
+import { setupSwagger } from './swagger.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 
 /** Bulk sync uploads up to 500 documents; only those routes get 2 MB. */
@@ -52,5 +53,6 @@ export function configureApp(app: INestApplication) {
     }),
   );
   app.useGlobalFilters(new AllExceptionsFilter());
+  setupSwagger(app);
   app.enableShutdownHooks();
 }
