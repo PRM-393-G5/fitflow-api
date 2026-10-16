@@ -1,3 +1,4 @@
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   BadRequestException,
   Body,
@@ -24,6 +25,8 @@ const GONE = 'Account no longer exists';
 export const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 @Controller('me')
+@ApiTags('me')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 export class MeController {
   constructor(private readonly users: UsersService) {}

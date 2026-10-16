@@ -1,4 +1,9 @@
-import { NodeEnv, splitList, validateEnv } from './env.validation.js';
+import {
+  NodeEnv,
+  splitList,
+  swaggerEnabled,
+  validateEnv,
+} from './env.validation.js';
 
 const required = {
   MONGODB_URI: 'x',
@@ -58,6 +63,44 @@ describe('validateEnv lists', () => {
     expect(() =>
       validateEnv({ ...required, GOOGLE_CLIENT_IDS: ' , ' }),
     ).toThrow(/at least one ID/);
+  });
+});
+
+describe('validateEnv CORS and Swagger', () => {
+  it.each(['*', 'https://a.example/', 'a.example', 'https://*.example'])(
+    'rejects CORS origin %s',
+    (origin) => {
+      expect(() => validateEnv({ ...required, CORS_ORIGINS: origin })).toThrow(
+        /CORS_ORIGINS/,
+      );
+    },
+  );
+
+  it('accepts exact origins', () => {
+    const env = validateEnv({
+      ...required,
+      CORS_ORIGINS: 'https://admin.example.com, http://localhost:5173',
+    });
+    expect(splitList(env.CORS_ORIGINS)).toHaveLength(2);
+  });
+
+  it('enables Swagger outside production unless told otherwise', () => {
+    expect(swaggerEnabled(validateEnv(required))).toBe(true);
+    expect(
+      swaggerEnabled(validateEnv({ ...required, NODE_ENV: 'production' })),
+    ).toBe(false);
+    expect(
+      swaggerEnabled(
+        validateEnv({
+          ...required,
+          NODE_ENV: 'production',
+          SWAGGER_ENABLED: 'true',
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      swaggerEnabled(validateEnv({ ...required, SWAGGER_ENABLED: 'false' })),
+    ).toBe(false);
   });
 });
 

@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:8
+        env:
+          MONGO_INITDB_ROOT_USERNAME: admin
+          MONGO_INITDB_ROOT_PASSWORD: ci-password
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping: 1})'"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      MONGODB_TEST_URI: mongodb://admin:ci-password@localhost:27017/fitflow-test?authSource=admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx prettier --check "src/**/*.ts" "test/**/*.ts"
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:e2e

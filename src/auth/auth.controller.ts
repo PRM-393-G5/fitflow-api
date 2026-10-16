@@ -1,4 +1,13 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+import { ThrottlerGuard } from '@nestjs/throttler';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthService } from './auth.service.js';
 import type { SignInResult } from './auth.service.js';
 import { GoogleSignInDto } from './dto/google-sign-in.dto.js';
@@ -6,6 +15,8 @@ import { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import type { TokenPair } from './tokens/tokens.service.js';
 
 @Controller('auth')
+@ApiTags('auth')
+@UseGuards(ThrottlerGuard)
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
