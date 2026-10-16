@@ -115,6 +115,25 @@ describe('User docs (e2e)', () => {
     );
   });
 
+  it('syncs food-log days keyed by date', async () => {
+    const day = {
+      id: '2026-10-16',
+      meals: [
+        {
+          label: 'Lunch',
+          items: [{ name: 'Mi Quang', kcal: 550, proteinG: 26 }],
+        },
+      ],
+    };
+    await alice.put('/api/me/docs/foodDays/2026-10-16', day).expect(204);
+    await alice.delete('/api/me/docs/foodDays/2026-10-15').expect(204);
+    const { body } = await alice.get('/api/me/docs/foodDays').expect(200);
+    expect(body).toEqual([{ id: '2026-10-15', deleted: true }, day]);
+    expect((await bob.get('/api/me/docs/foodDays').expect(200)).body).toEqual(
+      [],
+    );
+  });
+
   it('refuses writes once the account is deleted', async () => {
     const ghost = await signedInUser(app, 'ghost');
     await app
