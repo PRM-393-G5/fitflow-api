@@ -18,8 +18,13 @@ then the API issues its own JWT and stores per-user sync data.
 cd backend
 npm install
 cp .env.example .env   # adjust MONGODB_URI / PORT if needed
+npm run seed           # load the built-in workout templates
 npm run start:dev      # http://localhost:3001/api
 ```
+
+`npm run seed` makes the `workouttemplates` collection match
+`src/templates/seed/workout-templates.seed.ts` (exported from the app's
+`lib/data/seed_workouts.dart`); it is safe to run repeatedly.
 
 Every route lives under `/api`. The app refuses to start when a required
 environment variable is missing or invalid (see `src/config/env.validation.ts`).
