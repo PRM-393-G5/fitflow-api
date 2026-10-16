@@ -13,10 +13,8 @@ import {
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthUser } from '../auth/jwt-auth.guard.js';
-import {
-  assertDocData,
-  assertDocList,
-} from '../common/validation/json-body.js';
+import { assertJsonObject } from '../common/validation/json-body.js';
+import { assertDocList } from './dto/doc-body.js';
 import { DocParams, KindParams } from './dto/doc-params.dto.js';
 import { UsersService } from '../users/users.service.js';
 import { UserDocsService } from './user-docs.service.js';
@@ -74,7 +72,7 @@ export class UserDocsController {
     @Param() params: DocParams,
     @Body() body: unknown,
   ): Promise<void> {
-    const data = assertDocData(body);
+    const data = assertJsonObject(body);
     await this.requireAccount(caller);
     await this.docs.upsertMany(caller.userId, params.kind, [
       { ...data, id: params.id },

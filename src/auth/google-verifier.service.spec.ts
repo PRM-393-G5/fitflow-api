@@ -30,6 +30,7 @@ describe('GoogleVerifier', () => {
     email_verified: true,
     name: 'A',
     picture: 'https://example.com/a.png',
+    iat: 1_700_000_000,
   };
 
   it('returns the profile of a valid token, checking every audience', async () => {
@@ -39,6 +40,7 @@ describe('GoogleVerifier', () => {
       email: 'a@example.com',
       name: 'A',
       photoUrl: 'https://example.com/a.png',
+      issuedAt: 1_700_000_000,
     });
     expect(verify).toHaveBeenCalledWith({
       idToken: 'token',
