@@ -28,7 +28,7 @@ describe('assertDocList', () => {
     expect(
       assertDocList({ docs: [{ id: '2026-10-16:1792159418713000' }] }, 'meals'),
     ).toHaveLength(1);
-    for (const id of ['lunch', '2026-10-5:x', '2026-10-16']) {
+    for (const id of ['lunch', '2026-10-5:x', '2026-10-16', '2026-13-45:x']) {
       expect(() => assertDocList({ docs: [{ id }] }, 'meals')).toThrow(
         BadRequestException,
       );
