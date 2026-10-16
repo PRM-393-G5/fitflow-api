@@ -118,6 +118,9 @@ npm run test:e2e   # HTTP + MongoDB integration tests (needs MongoDB running;
 npm run build
 ```
 
+GitHub Actions (`.github/workflows/ci.yml`) runs all of the above on every
+push to `main` and every pull request, against a MongoDB service container.
+
 ## Roadmap
 
 The migration off Firebase is split into small PRs — see
