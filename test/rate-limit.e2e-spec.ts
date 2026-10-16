@@ -4,6 +4,7 @@ import type { App } from 'supertest/types.js';
 
 describe('Auth rate limit (e2e)', () => {
   let app: INestApplication<App>;
+  const previous = process.env.AUTH_RATE_LIMIT;
 
   beforeAll(async () => {
     // Must be set before AppModule (and its ConfigModule) is loaded.
@@ -14,15 +15,29 @@ describe('Auth rate limit (e2e)', () => {
 
   afterAll(async () => {
     await app?.close();
+    process.env.AUTH_RATE_LIMIT = previous;
   });
 
-  it('answers 429 after AUTH_RATE_LIMIT auth requests a minute', async () => {
-    const attempt = () =>
-      request(app.getHttpServer())
-        .post('/api/auth/refresh')
-        .send({ refreshToken: 'x'.repeat(43) });
-    for (let i = 0; i < 3; i++) await attempt().expect(401);
-    const limited = await attempt().expect(429);
+  it('shares one AUTH_RATE_LIMIT budget across the auth routes', async () => {
+    const server = app.getHttpServer();
+    const refreshToken = 'x'.repeat(43);
+    await request(server)
+      .post('/api/auth/refresh')
+      .send({ refreshToken })
+      .expect(401);
+    await request(server)
+      .post('/api/auth/logout')
+      .send({ refreshToken })
+      .expect(204);
+    await request(server)
+      .post('/api/auth/refresh')
+      .send({ refreshToken })
+      .expect(401);
+    // Fourth auth request of the minute, on yet another route.
+    const limited = await request(server)
+      .post('/api/auth/logout')
+      .send({ refreshToken })
+      .expect(429);
     expect(limited.body).toMatchObject({ statusCode: 429 });
   });
 

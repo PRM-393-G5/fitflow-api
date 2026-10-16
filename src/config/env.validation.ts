@@ -1,6 +1,8 @@
 import { plainToInstance } from 'class-transformer';
 import {
   IsEnum,
+  IsIn,
+  IsOptional,
   IsInt,
   IsNotEmpty,
   IsString,
@@ -54,6 +56,19 @@ export class EnvironmentVariables {
   AUTH_RATE_LIMIT: number = 20;
 
   /**
+   * Reverse-proxy hops in front of the API (0 = none). Needed so rate
+   * limits key on the real client IP (X-Forwarded-For), not the proxy's.
+   */
+  @IsInt()
+  @Min(0)
+  TRUST_PROXY_HOPS: number = 0;
+
+  /** Serve Swagger UI at /api/docs; defaults to on except in production. */
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  SWAGGER_ENABLED?: 'true' | 'false';
+
+  /**
    * Comma-separated browser origins allowed by CORS. Empty (default):
    * CORS stays off — the mobile app does not need it.
    */
@@ -74,6 +89,17 @@ export function splitList(value: string): string[] {
     .filter((item) => item.length > 0);
 }
 
+/** An exact browser origin, as CORS compares it. */
+const ORIGIN_PATTERN = /^https?:\/\/[A-Za-z0-9.-]+(:\d+)?$/;
+
+/** Whether Swagger UI is served (explicit flag, else not in production). */
+export function swaggerEnabled(
+  env: Pick<EnvironmentVariables, 'NODE_ENV' | 'SWAGGER_ENABLED'>,
+): boolean {
+  if (env.SWAGGER_ENABLED !== undefined) return env.SWAGGER_ENABLED === 'true';
+  return env.NODE_ENV !== NodeEnv.Production;
+}
+
 /** Fails fast with every invalid variable listed, instead of at first use. */
 export function validateEnv(config: Record<string, unknown>) {
   const env = plainToInstance(EnvironmentVariables, config, {
@@ -85,6 +111,14 @@ export function validateEnv(config: Record<string, unknown>) {
       .flatMap((error) => Object.values(error.constraints ?? {}))
       .join('\n  ');
     throw new Error(`Invalid environment:\n  ${details}`);
+  }
+  const badOrigin = splitList(env.CORS_ORIGINS).find(
+    (origin) => !ORIGIN_PATTERN.test(origin),
+  );
+  if (badOrigin !== undefined) {
+    throw new Error(
+      `Invalid environment:\n  CORS_ORIGINS entry "${badOrigin}" must be scheme://host[:port] with no path or wildcard`,
+    );
   }
   if (splitList(env.GOOGLE_CLIENT_IDS).length === 0) {
     throw new Error(
