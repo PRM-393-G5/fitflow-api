@@ -18,6 +18,8 @@ import { DOCS_PATH, setupSwagger } from './swagger.js';
 
 /** Bulk sync uploads up to 500 documents; only those routes get 2 MB. */
 export const BULK_BODY_LIMIT = '2mb';
+/** Base64 food photos sent to /api/ai can reach a few MB. */
+export const AI_BODY_LIMIT = '6mb';
 export const DEFAULT_BODY_LIMIT = '100kb';
 
 /**
@@ -62,6 +64,7 @@ export function configureApp(app: INestApplication) {
     app.enableCors({ origin: origins });
   }
   app.use('/api/me/docs', json({ limit: BULK_BODY_LIMIT }));
+  app.use('/api/ai', json({ limit: AI_BODY_LIMIT }));
   app.use(json({ limit: DEFAULT_BODY_LIMIT }));
   app.useGlobalPipes(
     new ValidationPipe({
