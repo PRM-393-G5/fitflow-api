@@ -48,6 +48,8 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | `TRUST_PROXY_HOPS` | `0` | Reverse proxies in front of the API; set it when deployed behind one so rate limits see the real client IP |
 | `SWAGGER_ENABLED` | on, except `NODE_ENV=production` | Serve Swagger UI at `/api/docs` |
 | `CORS_ORIGINS` | empty (CORS off) | Comma-separated exact browser origins (`https://host[:port]`, no path or `*`) allowed to call the API; the mobile app needs none |
+| `OPENAI_API_KEY` | empty (AI disabled) | Server-side OpenAI API key used by `/api/ai/*` (workout plans, meal plans, food photo vision, form review) |
+| `OPENAI_MODEL` | `gpt-6-luna` | OpenAI model used for structured JSON completions |
 | `MONGODB_TEST_URI` | local `fitflow-test` DB | Database used by the test suites (never the dev DB); export it in the shell — `.env` is not read for it |
 
 ## Endpoints
@@ -60,6 +62,12 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | POST | `/api/auth/refresh` | Body `{refreshToken}` → new `{accessToken, expiresIn, refreshToken}`; the old refresh token stops working |
 | POST | `/api/auth/logout` | Body `{refreshToken}` → `204`; revokes that session's refresh tokens |
 | GET | `/api/templates` | Built-in workout plans in display order (`Cache-Control: public, max-age=300`), in the app's `Workout` JSON shape (`id`, `name`, `durationMinutes`, `level`, `category`, `description`, `exercises`) |
+| GET | `/api/ai/status` | `{configured, model}` — whether the server has `OPENAI_API_KEY` configured |
+| POST | `/api/ai/generate` | Structured-output JSON completion proxy (`{system, user, schema, schemaName, reasoningEffort?, imageBase64?, imageMimeType?}`) |
+| POST | `/api/ai/workout-plan` | Generate a structured workout plan from `{request, level?, durationMinutes?, goal?}` |
+| POST | `/api/ai/meal-plan` | Generate a daily meal plan from `{targetKcal, proteinG, meals, goal?, preferences?}` |
+| POST | `/api/ai/food-photo` | Identify dishes and estimate calories/macros from `{imageBase64, imageMimeType?}` |
+| POST | `/api/ai/form-review` | Review post-set rep telemetry from `{exercise, reps}` |
 | GET | `/api/me/docs/:kind` | 🔒 All synced documents of `kind` (`sessions`, `workouts`, `weights`, `meals`); `?since=yyyy-mm-dd` keeps ids from that day on; deleted ones as `{id, deleted: true}` |
 | PUT | `/api/me/docs/:kind` | 🔒 Bulk upsert, body `{docs: [{id, …}]}` (≤ 500, ≤ 2 MB; other routes accept ≤ 100 kB) → `204` |
 | PUT | `/api/me/docs/:kind/:id` | 🔒 Create or replace one document (the app's JSON) → `204` |
