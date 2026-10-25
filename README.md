@@ -19,8 +19,16 @@ cd backend
 npm install
 cp .env.example .env   # adjust MONGODB_URI / PORT if needed
 npm run build && npm run seed   # load the built-in workout templates
+npm run admin:create -- you@example.com "Your Name"   # admin-web account
 npm run start:dev               # http://localhost:3001/api
 ```
+
+`npm run admin:create -- <email> [name]` asks for the password twice
+(hidden; at least 8 characters) or reads it from `ADMIN_PASSWORD` when not
+run in a terminal. Run it again for an existing email to set a new
+password. Like `seed`, it runs from `dist/` and needs only `MONGODB_URI`.
+The admin web is a browser app on another origin, so add its origin to
+`CORS_ORIGINS` (e.g. `http://localhost:5173` in development).
 
 `npm run seed` makes the `workouttemplates` collection match
 `src/templates/seed/workout-templates.seed.ts` (exported from the app's
@@ -43,8 +51,10 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | `GOOGLE_CLIENT_IDS` | — (required) | Comma-separated Google OAuth client IDs accepted as ID-token audience (the app's `serverClientId`) |
 | `JWT_ACCESS_SECRET` | — (required, ≥ 32 chars) | HMAC secret for access tokens |
 | `ACCESS_TOKEN_TTL_SECONDS` | `900` | Access token lifetime |
+| `ADMIN_TOKEN_TTL_SECONDS` | `28800` | Admin-web access token lifetime (≥ 300) |
 | `REFRESH_TOKEN_TTL_DAYS` | `30` | Refresh token lifetime |
 | `AUTH_RATE_LIMIT` | `20` | Requests per minute per client IP, shared across `/api/auth/*` and `DELETE /api/me` (`429` beyond) |
+| `ADMIN_LOGIN_RATE_LIMIT` | `10` | `POST /api/admin/auth/login` attempts per minute per client IP; a separate budget, so admin logins never block app sign-ins |
 | `TRUST_PROXY_HOPS` | `0` | Reverse proxies in front of the API; set it when deployed behind one so rate limits see the real client IP |
 | `SWAGGER_ENABLED` | on, except `NODE_ENV=production` | Serve Swagger UI at `/api/docs` |
 | `CORS_ORIGINS` | empty (CORS off) | Comma-separated exact browser origins (`https://host[:port]`, no path or `*`) allowed to call the API; the mobile app needs none |
@@ -77,7 +87,11 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | GET | `/api/me/meta` | 🔒 `{updatedAt, meta}` — the app's profile/schedule/onboarding/weekly-goal blob; `meta` is `null` until first written |
 | PUT | `/api/me/meta` | 🔒 Body `{updatedAt, meta}` → `{applied, updatedAt, meta}`; applied only if `updatedAt` (epoch ms) is newer than the stored one, otherwise the newer server copy is returned; `updatedAt` more than 5 minutes ahead of the server clock is `400` |
 
+| POST | `/api/admin/auth/login` | Body `{email, password}` → `200 {accessToken, expiresIn, admin: {id, email, name}}`; `401 Invalid email or password` for an unknown email or a wrong password alike |
+| GET | `/api/admin/me` | 🛡 The signed-in admin `{id, email, name}` |
+
 🔒 = needs `Authorization: Bearer <accessToken>`.
+🛡 = needs an admin access token from `POST /api/admin/auth/login`.
 
 ### Sync documents
 
@@ -105,6 +119,18 @@ hashes in `refreshtokens` with a TTL index, and single-use:
   Replayed later, it is treated as stolen and the whole session is revoked.
 - If issuing the new pair fails, the old token is restored.
 
+### Admin sessions
+
+Admins of the admin web are separate from app users: email + password
+accounts in `admins`, created with `npm run admin:create`. Passwords are
+stored as scrypt hashes (`scrypt$N$r$p$salt$hash`, random 16-byte salt).
+Login returns only an access token (`aud` = `fitflow-admin`, valid for
+`ADMIN_TOKEN_TTL_SECONDS`); there is no refresh token, so the admin signs
+in again when it expires. Admin and app tokens share the signing secret
+but not the audience, so neither is accepted in place of the other. Every
+admin request re-checks that the admin still exists: deleting the
+document locks the admin out immediately.
+
 ## Data model
 
 | Collection | Key fields | Notes |
@@ -112,6 +138,7 @@ hashes in `refreshtokens` with a TTL index, and single-use:
 | `users` | `googleSub` (unique), `email`, `name`, `photoUrl`, `meta`, `metaUpdatedAt` | Created on first Google sign-in; `meta` is the app's last-write-wins profile blob |
 | `workouttemplates` | `_id` (app id, e.g. `full-body-foundation`), `name`, `durationMinutes`, `level`, `category`, `description`, `exercises`, `order` | Public built-in plans |
 | `userdocs` | `userId`, `kind`, `docId`, `data`, `deleted` — unique `(userId, kind, docId)` | Synced sessions / custom workouts / weights / logged meals (id `yyyy-mm-dd:<entry>`); deletes are tombstones so another device's merge cannot resurrect them |
+| `admins` | `email` (unique, lowercase), `name`, `passwordHash`, `lastLoginAt` | Admin-web accounts |
 | `refreshtokens` | `userId`, `sessionId`, `tokenHash` (unique), `usedAt`, `expiresAt` (TTL) | Current and used tokens of each session |
 
 Every error uses the same body:

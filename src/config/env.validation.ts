@@ -50,6 +50,16 @@ export class EnvironmentVariables {
   @Min(60)
   ACCESS_TOKEN_TTL_SECONDS: number = 900;
 
+  /** Admin-web access token lifetime in seconds (default 8 hours). */
+  @IsInt()
+  @Min(300)
+  ADMIN_TOKEN_TTL_SECONDS: number = 28800;
+
+  /** Admin login attempts per minute per client IP (own budget). */
+  @IsInt()
+  @Min(1)
+  ADMIN_LOGIN_RATE_LIMIT: number = 10;
+
   /** Requests per minute per client IP on the /auth routes and DELETE /me. */
   @IsInt()
   @Min(1)

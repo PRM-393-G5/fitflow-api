@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
+import { readBearerToken } from './bearer.js';
 import type { AccessTokenPayload } from './tokens/tokens.service.js';
 
 /** The signed-in caller, attached to the request by [JwtAuthGuard]. */
@@ -22,11 +23,7 @@ export class JwtAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const [scheme, token, ...rest] =
-      request.headers.authorization?.trim().split(/\s+/) ?? [];
-    if (scheme?.toLowerCase() !== 'bearer' || !token || rest.length > 0) {
-      throw new UnauthorizedException('Missing bearer token');
-    }
+    const token = readBearerToken(request);
     let payload: AccessTokenPayload;
     try {
       payload = await this.jwt.verifyAsync<AccessTokenPayload>(token);
