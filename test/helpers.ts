@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test, TestingModuleBuilder } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
+import { AdminsService } from '../src/admin/accounts/admins.service.js';
 import { AppModule } from '../src/app.module.js';
 import { APP_OPTIONS, configureApp } from '../src/app.setup.js';
 import { TokensService } from '../src/auth/tokens/tokens.service.js';
@@ -39,6 +40,49 @@ export async function signedInUser(app: INestApplication<App>, sub: string) {
     put: (path: string, body: unknown) =>
       request(server)
         .put(path)
+        .set(auth)
+        .send(body as object),
+    delete: (path: string) => request(server).delete(path).set(auth),
+  };
+}
+
+export const ADMIN_PASSWORD = 'admin-password-1';
+
+/**
+ * Creates (or resets) an admin, signs in through the login route and
+ * returns an authorised request helper for `/api/admin/*`.
+ */
+export async function signedInAdmin(
+  app: INestApplication<App>,
+  email = 'admin@example.com',
+) {
+  const { admin } = await app
+    .get(AdminsService)
+    .upsert(email, ADMIN_PASSWORD, 'Admin');
+  const server = app.getHttpServer();
+  const login = await request(server)
+    .post('/api/admin/auth/login')
+    .send({ email, password: ADMIN_PASSWORD })
+    .expect(200);
+  const accessToken = login.body.accessToken as string;
+  const auth = { Authorization: `Bearer ${accessToken}` };
+  return {
+    adminId: admin.id as string,
+    accessToken,
+    get: (path: string) => request(server).get(path).set(auth),
+    post: (path: string, body?: unknown) =>
+      request(server)
+        .post(path)
+        .set(auth)
+        .send(body as object),
+    put: (path: string, body: unknown) =>
+      request(server)
+        .put(path)
+        .set(auth)
+        .send(body as object),
+    patch: (path: string, body: unknown) =>
+      request(server)
+        .patch(path)
         .set(auth)
         .send(body as object),
     delete: (path: string) => request(server).delete(path).set(auth),
