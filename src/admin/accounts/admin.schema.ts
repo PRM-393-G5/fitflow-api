@@ -20,6 +20,13 @@ export class Admin {
   @Prop({ type: Date, default: null })
   lastLoginAt: Date | null;
 
+  /**
+   * Carried in admin tokens as `ver`; bumped when the password is reset so
+   * tokens issued before stop working.
+   */
+  @Prop({ default: 0 })
+  tokenVersion: number;
+
   createdAt: Date;
   updatedAt: Date;
 }
