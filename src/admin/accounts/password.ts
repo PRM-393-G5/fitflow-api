@@ -25,13 +25,14 @@ function derive(
 }
 
 /**
- * Hashes [password] with scrypt and a random salt, as
+ * Hashes [password] (NFC-normalised, so an accented password typed as
+ * composed or decomposed characters matches) with scrypt and a random salt, as
  * `scrypt$N$r$p$salt$hash` (base64url), so the cost can be raised later
  * without breaking stored hashes.
  */
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16);
-  const key = await derive(password, salt, N, R, P);
+  const key = await derive(password.normalize('NFC'), salt, N, R, P);
   return [
     'scrypt',
     N,
@@ -54,7 +55,7 @@ export async function verifyPassword(
   let key: Buffer;
   try {
     key = await derive(
-      password,
+      password.normalize('NFC'),
       Buffer.from(salt, 'base64url'),
       Number(n),
       Number(r),

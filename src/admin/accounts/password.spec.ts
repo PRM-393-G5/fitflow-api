@@ -13,6 +13,13 @@ describe('password hashing', () => {
     await expect(verifyPassword('', stored)).resolves.toBe(false);
   });
 
+  it('matches composed and decomposed forms of the same password', async () => {
+    const stored = await hashPassword('mật khẩu\u0301'.normalize('NFD'));
+    await expect(
+      verifyPassword('mật khẩu\u0301'.normalize('NFC'), stored),
+    ).resolves.toBe(true);
+  });
+
   it('salts every hash', async () => {
     const [a, b] = await Promise.all([
       hashPassword('same password'),

@@ -53,7 +53,8 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | `ACCESS_TOKEN_TTL_SECONDS` | `900` | Access token lifetime |
 | `ADMIN_TOKEN_TTL_SECONDS` | `28800` | Admin-web access token lifetime (≥ 300) |
 | `REFRESH_TOKEN_TTL_DAYS` | `30` | Refresh token lifetime |
-| `AUTH_RATE_LIMIT` | `20` | Requests per minute per client IP, shared across `/api/auth/*`, `POST /api/admin/auth/login` and `DELETE /api/me` (`429` beyond) |
+| `AUTH_RATE_LIMIT` | `20` | Requests per minute per client IP, shared across `/api/auth/*` and `DELETE /api/me` (`429` beyond) |
+| `ADMIN_LOGIN_RATE_LIMIT` | `10` | `POST /api/admin/auth/login` attempts per minute per client IP; a separate budget, so admin logins never block app sign-ins |
 | `TRUST_PROXY_HOPS` | `0` | Reverse proxies in front of the API; set it when deployed behind one so rate limits see the real client IP |
 | `SWAGGER_ENABLED` | on, except `NODE_ENV=production` | Serve Swagger UI at `/api/docs` |
 | `CORS_ORIGINS` | empty (CORS off) | Comma-separated exact browser origins (`https://host[:port]`, no path or `*`) allowed to call the API; the mobile app needs none |

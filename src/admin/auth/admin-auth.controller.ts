@@ -1,5 +1,5 @@
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
 import {
   Body,
   Controller,
@@ -9,6 +9,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { AUTH_THROTTLER } from '../../common/throttling/throttling.module.js';
 import type { AdminProfile } from '../accounts/admins.service.js';
 import { AdminAuthGuard } from './admin-auth.guard.js';
 import { AdminAuthService } from './admin-auth.service.js';
@@ -25,6 +26,7 @@ export class AdminAuthController {
   @Post('auth/login')
   @HttpCode(HttpStatus.OK)
   @UseGuards(ThrottlerGuard)
+  @SkipThrottle({ [AUTH_THROTTLER]: true })
   login(@Body() body: AdminLoginDto): Promise<AdminLoginResult> {
     return this.auth.login(body.email, body.password);
   }
