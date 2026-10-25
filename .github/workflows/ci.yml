@@ -10,7 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mongo:
-        image: mongo:8
+        # Newer 8.x images refuse to start on kernel >= 6.19 (SERVER-121912).
+        image: mongo:8.0.19
         env:
           MONGO_INITDB_ROOT_USERNAME: admin
           MONGO_INITDB_ROOT_PASSWORD: ci-password
