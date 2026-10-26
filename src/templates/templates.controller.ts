@@ -9,7 +9,11 @@ import type { TemplateJson } from './templates.service.js';
 export class TemplatesController {
   constructor(private readonly templates: TemplatesService) {}
 
-  /** Changes only when the seed runs, so clients/proxies may cache it. */
+  /**
+   * Edited from the admin web, but rarely: clients and proxies may cache
+   * it for 5 minutes (the app refreshes templates on start and keeps its
+   * cached copy offline).
+   */
   @Get()
   @Header('Cache-Control', 'public, max-age=300')
   findAll(): Promise<TemplateJson[]> {

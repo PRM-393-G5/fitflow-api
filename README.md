@@ -18,7 +18,7 @@ then the API issues its own JWT and stores per-user sync data.
 cd backend
 npm install
 cp .env.example .env   # adjust MONGODB_URI / PORT if needed
-npm run build && npm run seed   # add the built-in workout templates
+npm run build && npm run seed   # load the built-in workout templates
 npm run admin:create -- you@example.com "Your Name"   # admin-web account
 npm run start:dev               # http://localhost:3001/api
 ```
@@ -30,14 +30,13 @@ password. Like `seed`, it runs from `dist/` and needs only `MONGODB_URI`.
 The admin web is a browser app on another origin, so add its origin to
 `CORS_ORIGINS` (e.g. `http://localhost:5173` in development).
 
-`npm run seed` adds the built-in templates of
+`npm run seed` loads the built-in templates of
 `src/templates/seed/workout-templates.seed.ts` (exported from the app's
-`lib/data/seed_workouts.dart`) that are missing from `workouttemplates`
-and leaves the rest alone, so templates edited in the admin web survive
-it; a built-in the admin deleted comes back. `npm run seed -- --reset`
-makes the collection match the built-ins exactly (overwrites edits,
-deletes templates added in the admin web). Both are safe to run
-repeatedly, run the compiled `dist/seed.js` and need only `MONGODB_URI`,
+`lib/data/seed_workouts.dart`) into an empty `workouttemplates`
+collection; once templates exist it does nothing, since the admin web
+manages them from then on. `npm run seed -- --reset` makes the
+collection match the built-ins exactly (overwrites edits, deletes
+templates added in the admin web). Both are safe to run repeatedly, run the compiled `dist/seed.js` and need only `MONGODB_URI`,
 so they never rebuild `dist/` under a running server. Seed data is fully
 validated before the first write.
 

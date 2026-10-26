@@ -80,10 +80,10 @@ export class WorkoutTemplate {
   @Prop({ required: true, min: 1, validate: integer })
   durationMinutes: number;
 
-  @Prop({ required: true })
+  @Prop({ required: true, enum: TEMPLATE_LEVELS })
   level: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, enum: TEMPLATE_CATEGORIES })
   category: string;
 
   @Prop({ default: '' })
