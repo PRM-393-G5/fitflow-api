@@ -205,6 +205,12 @@ describe('Admin templates (e2e)', () => {
     expect(await model.exists({ _id: plan.id })).toBeNull();
   });
 
+  it('lists templates written without timestamps', async () => {
+    await model.collection.updateMany({}, { $unset: { updatedAt: '' } });
+    const { body } = await admin.get('/api/admin/templates').expect(200);
+    expect(body[0].updatedAt).toBeNull();
+  });
+
   it('keeps updatedAt when only the order changes', async () => {
     const before = (await admin.get('/api/admin/templates')).body;
     await new Promise((resolve) => setTimeout(resolve, 5));
