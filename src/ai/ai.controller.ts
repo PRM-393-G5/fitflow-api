@@ -1,4 +1,11 @@
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadGatewayResponse,
   ApiOkResponse,
@@ -6,6 +13,10 @@ import {
   ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/current-user.decorator.js';
+import type { AuthUser } from '../auth/jwt-auth.guard.js';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard.js';
+import { AiUsageService } from './ai-usage.service.js';
 import { AiService } from './ai.service.js';
 import {
   AnalyzeFoodPhotoDto,
@@ -15,10 +26,18 @@ import {
   ReviewFormDto,
 } from './dto/ai.dto.js';
 
+/**
+ * AI features. Every call except `status` is recorded for the admin web,
+ * attributed to the caller when the request carries a valid access token.
+ */
 @ApiTags('ai')
 @Controller('ai')
+@UseGuards(OptionalJwtAuthGuard)
 export class AiController {
-  constructor(private readonly ai: AiService) {}
+  constructor(
+    private readonly ai: AiService,
+    private readonly usage: AiUsageService,
+  ) {}
 
   @Get('status')
   @ApiOperation({
@@ -39,8 +58,13 @@ export class AiController {
   @ApiOkResponse({ description: 'Parsed JSON object matching the schema.' })
   @ApiServiceUnavailableResponse({ description: 'OpenAI key not configured.' })
   @ApiBadGatewayResponse({ description: 'Upstream OpenAI failure.' })
-  generateJson(@Body() dto: GenerateJsonDto) {
-    return this.ai.generateJson(dto);
+  generateJson(
+    @CurrentUser() caller: AuthUser | undefined,
+    @Body() dto: GenerateJsonDto,
+  ) {
+    return this.usage.track('generate', caller?.userId ?? null, () =>
+      this.ai.generateJson(dto),
+    );
   }
 
   @Post('workout-plan')
@@ -49,8 +73,13 @@ export class AiController {
     summary: 'Generate a personalized workout plan from a text prompt',
   })
   @ApiOkResponse({ description: 'Generated workout plan JSON.' })
-  generateWorkoutPlan(@Body() dto: GenerateWorkoutPlanDto) {
-    return this.ai.generateWorkoutPlan(dto);
+  generateWorkoutPlan(
+    @CurrentUser() caller: AuthUser | undefined,
+    @Body() dto: GenerateWorkoutPlanDto,
+  ) {
+    return this.usage.track('workout-plan', caller?.userId ?? null, () =>
+      this.ai.generateWorkoutPlan(dto),
+    );
   }
 
   @Post('meal-plan')
@@ -59,8 +88,13 @@ export class AiController {
     summary: 'Generate a daily meal plan matching calorie and protein targets',
   })
   @ApiOkResponse({ description: 'Generated meal plan JSON.' })
-  generateMealPlan(@Body() dto: GenerateMealPlanDto) {
-    return this.ai.generateMealPlan(dto);
+  generateMealPlan(
+    @CurrentUser() caller: AuthUser | undefined,
+    @Body() dto: GenerateMealPlanDto,
+  ) {
+    return this.usage.track('meal-plan', caller?.userId ?? null, () =>
+      this.ai.generateMealPlan(dto),
+    );
   }
 
   @Post('food-photo')
@@ -70,8 +104,13 @@ export class AiController {
       'Analyze a base64 food photo and estimate calories/macros per dish',
   })
   @ApiOkResponse({ description: 'Detected dishes and macro estimates.' })
-  analyzeFoodPhoto(@Body() dto: AnalyzeFoodPhotoDto) {
-    return this.ai.analyzeFoodPhoto(dto);
+  analyzeFoodPhoto(
+    @CurrentUser() caller: AuthUser | undefined,
+    @Body() dto: AnalyzeFoodPhotoDto,
+  ) {
+    return this.usage.track('food-photo', caller?.userId ?? null, () =>
+      this.ai.analyzeFoodPhoto(dto),
+    );
   }
 
   @Post('form-review')
@@ -80,7 +119,12 @@ export class AiController {
     summary: 'Review rep-by-rep pose telemetry and return coaching cues',
   })
   @ApiOkResponse({ description: 'Coaching summary and actionable tips.' })
-  reviewForm(@Body() dto: ReviewFormDto) {
-    return this.ai.reviewForm(dto);
+  reviewForm(
+    @CurrentUser() caller: AuthUser | undefined,
+    @Body() dto: ReviewFormDto,
+  ) {
+    return this.usage.track('form-review', caller?.userId ?? null, () =>
+      this.ai.reviewForm(dto),
+    );
   }
 }

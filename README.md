@@ -89,7 +89,6 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | DELETE | `/api/me` | 🔒 Body `{idToken}` from a Google sign-in of the same account made within the last 5 minutes (`403` otherwise — never `401`, so the app does not mistake it for an expired session) → `204`; deletes the account, every session and its documents |
 | GET | `/api/me/meta` | 🔒 `{updatedAt, meta}` — the app's profile/schedule/onboarding/weekly-goal blob; `meta` is `null` until first written |
 | PUT | `/api/me/meta` | 🔒 Body `{updatedAt, meta}` → `{applied, updatedAt, meta}`; applied only if `updatedAt` (epoch ms) is newer than the stored one, otherwise the newer server copy is returned; `updatedAt` more than 5 minutes ahead of the server clock is `400` |
-
 | POST | `/api/admin/auth/login` | Body `{email, password}` → `200 {accessToken, expiresIn, admin: {id, email, name}}`; `401 Invalid email or password` for an unknown email or a wrong password alike |
 | GET | `/api/admin/me` | 🛡 The signed-in admin `{id, email, name}` |
 | GET | `/api/admin/templates` | 🛡 Every workout template in display order, app shape plus `updatedAt` |
@@ -101,10 +100,18 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | GET | `/api/admin/users/:id` | 🛡 The item above plus the synced `profile` (goal, level, weekly goal, height, age, sex, activity level; `null` until the app syncs one), live document `counts`, workout `totals` (minutes, volume), `latestWeightKg`, `lastSyncAt` and the 10 most recent sessions; `404` if unknown |
 | PATCH | `/api/admin/users/:id` | 🛡 Body `{disabled}`: `true` locks the account, `false` unlocks it; either way all its sessions end (after an unlock the user signs in again) → the list item |
 | DELETE | `/api/admin/users/:id` | 🛡 Deletes the account, its sessions and every synced document → `204`; `404` if unknown |
+| GET | `/api/admin/stats/overview` | 🛡 `?days=1..90` (default 30) `&tz=<IANA zone>` (default `UTC`) → `{range, users: {total, locked, new, active}, sessions: {total, inRange, minutesInRange, formChecksInRange}, ai: {calls, errors}, templates, daily: [{date, newUsers, sessions, formChecks, aiCalls, aiErrors}]}` |
+| GET | `/api/admin/stats/ai` | 🛡 Same query → `{range, status, totals: {calls, errors, users, anonymousCalls, avgDurationMs}, byFeature, daily, errorsByCode, topUsers, recent}` (`recent` = latest 50 calls whatever the range) |
 | POST | `/api/admin/templates/reorder` | 🛡 Body `{ids}` listing every template id exactly once (else `400`) → the list in the new order |
 
 🔒 = needs `Authorization: Bearer <accessToken>`.
 🛡 = needs an admin access token from `POST /api/admin/auth/login`.
+
+Every `/api/ai/*` call except `status` is logged in `aiusages` for the
+admin web: caller (when the request carries a valid app access token;
+otherwise anonymous — the token is optional for now), feature, model,
+success or the error code the app saw, and duration. Prompts, photos and
+answers are never stored; entries expire after 180 days.
 
 ### Locked accounts
 
@@ -116,6 +123,16 @@ before, so the app drops its session at once and lands on the sign-in
 page. Unlocking lets the user sign in again (it also ends any session
 that raced the lock); their data is untouched. A locked user cannot
 delete their own account (they cannot sign in); an admin can.
+
+### Admin statistics
+
+Days are counted in the `tz` the admin web sends. Signups and AI calls are
+bucketed by their server timestamp in that zone; workouts by the date of
+their `completedAt` as the phone wrote it (its local time), so an evening
+workout in Vietnam lands on the right day. Minutes follow the app: whole
+minutes per session, at least 1. Form-check results are counted apart
+from workouts, and "active" users finished a workout or form check in the
+range.
 
 ### Template rules
 
@@ -174,6 +191,7 @@ document locks the admin out immediately.
 | `workouttemplates` | `_id` (app id, e.g. `full-body-foundation`), `name`, `durationMinutes`, `level`, `category`, `description`, `exercises`, `order` | Public built-in plans |
 | `userdocs` | `userId`, `kind`, `docId`, `data`, `deleted` — unique `(userId, kind, docId)` | Synced sessions / custom workouts / weights / logged meals (id `yyyy-mm-dd:<entry>`); deletes are tombstones so another device's merge cannot resurrect them |
 | `admins` | `email` (unique, lowercase), `name`, `passwordHash`, `lastLoginAt` | Admin-web accounts |
+| `aiusages` | `userId` (or null), `feature`, `model`, `ok`, `errorCode`, `durationMs`, `createdAt` (TTL 180 days) | One entry per AI call, no content |
 | `refreshtokens` | `userId`, `sessionId`, `tokenHash` (unique), `usedAt`, `expiresAt` (TTL) | Current and used tokens of each session |
 
 Every error uses the same body:
