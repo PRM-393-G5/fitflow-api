@@ -30,12 +30,15 @@ password. Like `seed`, it runs from `dist/` and needs only `MONGODB_URI`.
 The admin web is a browser app on another origin, so add its origin to
 `CORS_ORIGINS` (e.g. `http://localhost:5173` in development).
 
-`npm run seed` makes the `workouttemplates` collection match
+`npm run seed` loads the built-in templates of
 `src/templates/seed/workout-templates.seed.ts` (exported from the app's
-`lib/data/seed_workouts.dart`); it is safe to run repeatedly. It runs the
-compiled `dist/seed.js` and needs only `MONGODB_URI`, so it never rebuilds
-`dist/` under a running server. Seed data is fully validated before the
-first write.
+`lib/data/seed_workouts.dart`) into an empty `workouttemplates`
+collection; once templates exist it does nothing, since the admin web
+manages them from then on. `npm run seed -- --reset` makes the
+collection match the built-ins exactly (overwrites edits, deletes
+templates added in the admin web). Both are safe to run repeatedly, run the compiled `dist/seed.js` and need only `MONGODB_URI`,
+so they never rebuild `dist/` under a running server. Seed data is fully
+validated before the first write.
 
 Every route lives under `/api`. Interactive docs (Swagger UI, off in
 production unless `SWAGGER_ENABLED=true`) are served at
@@ -89,9 +92,26 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 
 | POST | `/api/admin/auth/login` | Body `{email, password}` → `200 {accessToken, expiresIn, admin: {id, email, name}}`; `401 Invalid email or password` for an unknown email or a wrong password alike |
 | GET | `/api/admin/me` | 🛡 The signed-in admin `{id, email, name}` |
+| GET | `/api/admin/templates` | 🛡 Every workout template in display order, app shape plus `updatedAt` |
+| GET | `/api/admin/templates/:id` | 🛡 One template; `404` if unknown |
+| POST | `/api/admin/templates` | 🛡 Create `{id, name, durationMinutes, level, category, description, exercises}` → `201`, appended to the list; `409` if the id is taken |
+| PUT | `/api/admin/templates/:id` | 🛡 Replace all fields but `id` and position → `200`; `404` if unknown |
+| DELETE | `/api/admin/templates/:id` | 🛡 → `204`; `404` if unknown |
+| POST | `/api/admin/templates/reorder` | 🛡 Body `{ids}` listing every template id exactly once (else `400`) → the list in the new order |
 
 🔒 = needs `Authorization: Bearer <accessToken>`.
 🛡 = needs an admin access token from `POST /api/admin/auth/login`.
+
+### Template rules
+
+What the admin API accepts is what the app can parse and filter: `level`
+is `Beginner`, `Intermediate` or `Advanced`; `category` is `Strength`,
+`Cardio` or `Mobility`; ids are lowercase words joined by `-` and may not
+start with `custom-` (the app's own plans) or be `form-check`. A template
+has 1–30 exercises with unique ids, each rep-based (`reps` > 0) or timed
+(`durationSeconds` > 0), not both. `GET /api/templates` may be cached for
+5 minutes, so edits reach devices on their next template refresh after
+that.
 
 ### Sync documents
 
