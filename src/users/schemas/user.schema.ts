@@ -31,6 +31,16 @@ export class User {
   @Prop({ default: 0 })
   metaUpdatedAt: number;
 
+  /**
+   * Locked by an admin: sign-in is refused (403), refresh tokens are
+   * revoked and every `/api/me` route answers 401.
+   */
+  @Prop({ default: false })
+  disabled: boolean;
+
+  @Prop({ type: Date, default: null })
+  lastSignInAt: Date | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
