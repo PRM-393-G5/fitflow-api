@@ -97,10 +97,23 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | POST | `/api/admin/templates` | 🛡 Create `{id, name, durationMinutes, level, category, description, exercises}` → `201`, appended to the list; `409` if the id is taken |
 | PUT | `/api/admin/templates/:id` | 🛡 Replace all fields but `id` and position → `200`; `404` if unknown |
 | DELETE | `/api/admin/templates/:id` | 🛡 → `204`; `404` if unknown |
+| GET | `/api/admin/users` | 🛡 `?search=&status=all\|active\|locked&page=1&limit=20` (limit ≤ 100) → `{items, total, page, limit}`, newest first; each item `{id, email, name, photoUrl, disabled, createdAt, lastSignInAt, sessionCount}` (finished workouts, form checks excluded); search matches email or name, case-insensitive |
+| GET | `/api/admin/users/:id` | 🛡 The item above plus the synced `profile` (goal, level, weekly goal, height, age, sex, activity level; `null` until the app syncs one), live document `counts`, workout `totals` (minutes, volume), `latestWeightKg`, `lastSyncAt` and the 10 most recent sessions; `404` if unknown |
+| PATCH | `/api/admin/users/:id` | 🛡 Body `{disabled}`: `true` locks the account and ends all its sessions, `false` unlocks it → the list item |
+| DELETE | `/api/admin/users/:id` | 🛡 Deletes the account, its sessions and every synced document → `204`; `404` if unknown |
 | POST | `/api/admin/templates/reorder` | 🛡 Body `{ids}` listing every template id exactly once (else `400`) → the list in the new order |
 
 🔒 = needs `Authorization: Bearer <accessToken>`.
 🛡 = needs an admin access token from `POST /api/admin/auth/login`.
+
+### Locked accounts
+
+An admin can lock an account (`PATCH /api/admin/users/:id`). Locking
+deletes its refresh tokens; from then on Google sign-in answers `403
+Account is locked`, refreshing fails with `401`, and every `/api/me`
+route answers `401 Account is locked` even for an access token issued
+before, so the app drops its session at once and lands on the sign-in
+page. Unlocking lets the user sign in again; their data is untouched.
 
 ### Template rules
 
@@ -134,7 +147,7 @@ Refresh tokens are 32 random bytes (base64url), stored only as SHA-256
 hashes in `refreshtokens` with a TTL index, and single-use:
 
 - Each refresh atomically marks the token used and returns a new pair in
-  the same session; refreshing fails once the account is deleted.
+  the same session; refreshing fails once the account is deleted or locked.
 - A used token replayed within 10 s (a client retry) just gets `401`.
   Replayed later, it is treated as stolen and the whole session is revoked.
 - If issuing the new pair fails, the old token is restored.
@@ -155,7 +168,7 @@ document locks the admin out immediately.
 
 | Collection | Key fields | Notes |
 |---|---|---|
-| `users` | `googleSub` (unique), `email`, `name`, `photoUrl`, `meta`, `metaUpdatedAt` | Created on first Google sign-in; `meta` is the app's last-write-wins profile blob |
+| `users` | `googleSub` (unique), `email`, `name`, `photoUrl`, `meta`, `metaUpdatedAt`, `disabled`, `lastSignInAt` | Created on first Google sign-in; `meta` is the app's last-write-wins profile blob; `disabled` = locked by an admin |
 | `workouttemplates` | `_id` (app id, e.g. `full-body-foundation`), `name`, `durationMinutes`, `level`, `category`, `description`, `exercises`, `order` | Public built-in plans |
 | `userdocs` | `userId`, `kind`, `docId`, `data`, `deleted` — unique `(userId, kind, docId)` | Synced sessions / custom workouts / weights / logged meals (id `yyyy-mm-dd:<entry>`); deletes are tombstones so another device's merge cannot resurrect them |
 | `admins` | `email` (unique, lowercase), `name`, `passwordHash`, `lastLoginAt` | Admin-web accounts |

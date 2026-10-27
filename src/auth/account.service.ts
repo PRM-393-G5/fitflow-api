@@ -41,8 +41,16 @@ export class AccountService {
     if (profile.sub !== user.googleSub) {
       throw new ForbiddenException('Google account does not match');
     }
+    await this.purge(userId);
+  }
 
-    await this.users.remove(userId);
+  /**
+   * Deletes the account, its sessions and every synced document, without
+   * re-authentication (account deletion above, and admins). False when
+   * the account did not exist.
+   */
+  async purge(userId: string): Promise<boolean> {
+    if (!(await this.users.remove(userId))) return false;
     try {
       await this.tokens.revokeAll(userId);
       await this.docs.removeAllForUser(userId);
@@ -54,6 +62,7 @@ export class AccountService {
       );
       throw error;
     }
+    return true;
   }
 
   private async reauthenticate(idToken: string): Promise<GoogleProfile> {

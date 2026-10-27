@@ -1,4 +1,8 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { isObjectIdOrHexString, Model, mongo } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema.js';
@@ -61,6 +65,7 @@ export class UsersService implements OnModuleInit {
               // photo removed on Google is cleared here too.
               name: profile.name ?? null,
               photoUrl: profile.photoUrl ?? null,
+              lastSignInAt: new Date(),
             },
           },
           {
@@ -90,6 +95,17 @@ export class UsersService implements OnModuleInit {
   async findById(id: string): Promise<UserDocument | null> {
     if (!isObjectIdOrHexString(id)) return null;
     return this.users.findById(id).exec();
+  }
+
+  /**
+   * The account [id] if it exists and is not locked; otherwise 401, which
+   * makes the app drop its session and show the sign-in page.
+   */
+  async requireActive(id: string): Promise<UserDocument> {
+    const user = await this.findById(id);
+    if (!user) throw new UnauthorizedException('Account no longer exists');
+    if (user.disabled) throw new UnauthorizedException('Account is locked');
+    return user;
   }
 
   /** Deletes the account document; true when it existed. */

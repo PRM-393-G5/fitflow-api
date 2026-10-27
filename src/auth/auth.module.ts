@@ -30,6 +30,6 @@ import { TokensService } from './tokens/tokens.service.js';
     AuthService,
     AccountService,
   ],
-  exports: [TokensService],
+  exports: [TokensService, AccountService],
 })
 export class AuthModule {}

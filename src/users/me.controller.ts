@@ -31,17 +31,18 @@ export const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 export class MeController {
   constructor(private readonly users: UsersService) {}
 
-  /** Profile of the signed-in user; 401 if the account no longer exists. */
+  /** Profile of the signed-in user; 401 if the account is gone or locked. */
   @Get()
   async profile(@CurrentUser() caller: AuthUser): Promise<UserProfile> {
-    const user = await this.users.findById(caller.userId);
-    if (!user) throw new UnauthorizedException(GONE);
-    return UsersService.toProfile(user);
+    return UsersService.toProfile(
+      await this.users.requireActive(caller.userId),
+    );
   }
 
   /** The synced meta blob: `{updatedAt, meta}`; `meta` null if never set. */
   @Get('meta')
   async getMeta(@CurrentUser() caller: AuthUser): Promise<MetaState> {
+    await this.users.requireActive(caller.userId);
     const state = await this.users.getMeta(caller.userId);
     if (!state) throw new UnauthorizedException(GONE);
     return state;
@@ -61,6 +62,7 @@ export class MeController {
       throw new BadRequestException('updatedAt is in the future');
     }
     const meta = assertJsonObject(body.meta, 'meta');
+    await this.users.requireActive(caller.userId);
     const result = await this.users.putMeta(
       caller.userId,
       body.updatedAt,
