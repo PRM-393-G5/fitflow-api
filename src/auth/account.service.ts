@@ -35,8 +35,7 @@ export class AccountService {
    * appear while the data is wiped.
    */
   async deleteAccount(userId: string, idToken: string): Promise<void> {
-    const user = await this.users.findById(userId);
-    if (!user) throw new UnauthorizedException('Account no longer exists');
+    const user = await this.users.requireActive(userId);
     const profile = await this.reauthenticate(idToken);
     if (profile.sub !== user.googleSub) {
       throw new ForbiddenException('Google account does not match');
