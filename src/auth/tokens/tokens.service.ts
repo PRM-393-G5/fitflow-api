@@ -90,9 +90,12 @@ export class TokensService implements OnModuleInit {
     }
 
     const userId = claimed.userId.toString();
-    if (!(await this.users.findById(userId))) {
+    const user = await this.users.findById(userId);
+    if (!user || user.disabled) {
       await this.revokeAll(userId);
-      throw new UnauthorizedException('Account no longer exists');
+      throw new UnauthorizedException(
+        user ? 'Account is locked' : 'Account no longer exists',
+      );
     }
     try {
       return await this.issueInSession(userId, claimed.sessionId);
