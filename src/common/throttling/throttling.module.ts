@@ -3,12 +3,20 @@ import { ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { EnvironmentVariables } from '../../config/env.validation.js';
 
+/** The app's sign-in, refresh, logout and account deletion. */
+export const AUTH_THROTTLER = 'auth';
+/** The admin web's password login. */
+export const ADMIN_LOGIN_THROTTLER = 'admin-login';
+
 /**
- * Rate limits for routes that talk to Google or mint tokens. Only routes
- * marked with `@UseGuards(ThrottlerGuard)` are limited, and they share
- * one budget per client IP (the default key is per route). Counters live
- * in memory, per API instance; behind a proxy set TRUST_PROXY_HOPS so the
- * IP is the client's.
+ * Rate limits for routes that talk to Google, check passwords or mint
+ * tokens. Only routes marked with `@UseGuards(ThrottlerGuard)` are
+ * limited. Each throttler is one budget per client IP shared by its
+ * routes (the default key is per route); every guarded route must skip
+ * the throttlers that are not its own (`@SkipThrottle`), so admin login
+ * attempts never use up app users' sign-in budget. Counters live in
+ * memory, per API instance; behind a proxy set TRUST_PROXY_HOPS so the IP
+ * is the client's.
  */
 @Module({
   imports: [
@@ -17,9 +25,14 @@ import { EnvironmentVariables } from '../../config/env.validation.js';
       useFactory: (config: ConfigService<EnvironmentVariables, true>) => ({
         throttlers: [
           {
-            name: 'auth',
+            name: AUTH_THROTTLER,
             ttl: 60_000,
             limit: config.get('AUTH_RATE_LIMIT', { infer: true }),
+          },
+          {
+            name: ADMIN_LOGIN_THROTTLER,
+            ttl: 60_000,
+            limit: config.get('ADMIN_LOGIN_RATE_LIMIT', { infer: true }),
           },
         ],
         generateKey: (_context, tracker, throttlerName) =>

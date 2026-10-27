@@ -30,7 +30,12 @@ let dummyHash: Promise<string> | undefined;
  * on first use, not in every process that imports this file.
  */
 const getDummyHash = () =>
-  (dummyHash ??= hashPassword('fitflow-admin-dummy-password'));
+  (dummyHash ??= hashPassword('fitflow-admin-dummy-password').catch(
+    (error: unknown) => {
+      dummyHash = undefined; // retry next time instead of failing forever
+      throw error;
+    },
+  ));
 
 @Injectable()
 export class AdminsService implements OnModuleInit {
