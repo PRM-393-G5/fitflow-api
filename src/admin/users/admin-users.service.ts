@@ -35,6 +35,10 @@ export interface UserPage {
 export interface RecentSession {
   id: string;
   workoutName: string | null;
+  /**
+   * As the app wrote it: usually the phone's local time without an
+   * offset (`2026-10-27T18:00:00.000`), so show it as is, not converted.
+   */
   completedAt: string | null;
   minutes: number;
   completedSets: number;
@@ -204,7 +208,7 @@ export class AdminUsersService {
     if (!user) return null;
     if (disabled) await this.tokens.revokeAll(id);
     const counts = await this.sessionCounts([user._id]);
-    return toSummary(user, counts.get(id) ?? 0);
+    return toSummary(user, counts.get(user._id.toString()) ?? 0);
   }
 
   /** Deletes the account with all its data; false if it did not exist. */
@@ -247,21 +251,22 @@ function toSummary(user: LeanUser, sessionCount: number): AdminUserSummary {
   };
 }
 
+/**
+ * Whole minutes, at least 1, like the app's `durationMinutes`. Both
+ * strings are parsed alike, so their missing offset cancels out.
+ */
+export function sessionMinutes(startedAt: unknown, completedAt: unknown) {
+  const ms = Date.parse(String(completedAt)) - Date.parse(String(startedAt));
+  return Number.isNaN(ms) ? 1 : Math.max(1, Math.floor(ms / 60_000));
+}
+
 function toRecentSession(doc: DocFields): RecentSession {
   const { data } = doc;
-  const started = Date.parse(String(data.startedAt));
-  const completed = Date.parse(String(data.completedAt));
-  const minutes =
-    Number.isNaN(started) || Number.isNaN(completed)
-      ? 0
-      : Math.max(0, Math.round((completed - started) / 60_000));
   return {
     id: doc.docId,
     workoutName: stringOrNull(data.workoutName),
-    completedAt: Number.isNaN(completed)
-      ? null
-      : new Date(completed).toISOString(),
-    minutes,
+    completedAt: stringOrNull(data.completedAt),
+    minutes: sessionMinutes(data.startedAt, data.completedAt),
     completedSets: numberOrNull(data.completedSets) ?? 0,
     volumeKg: numberOrNull(data.volumeKg) ?? 0,
     formCheck: data.workoutId === FORM_CHECK_WORKOUT_ID,

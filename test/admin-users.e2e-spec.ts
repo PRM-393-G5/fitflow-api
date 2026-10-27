@@ -100,7 +100,8 @@ describe('Admin users (e2e)', () => {
         disabled: false,
         sessionCount: 2,
       });
-      expect(Date.parse(body.items[1].lastSignInAt)).not.toBeNaN();
+      // Only a sign-in through the API (that opens a session) stamps it.
+      expect(body.items[1].lastSignInAt).toBeNull();
     });
 
     it('searches email and name case-insensitively, literally', async () => {
@@ -206,6 +207,28 @@ describe('Admin users (e2e)', () => {
       });
     });
 
+    it('keeps the phone-local completedAt and counts minutes like the app', async () => {
+      const id = await createUser('g-1', 'local@example.com');
+      await docs.upsertMany(id, 'sessions', [
+        {
+          ...session('short', '2026-10-01T10:00:00.000Z', 0),
+          startedAt: '2026-10-01T18:00:00.000',
+          completedAt: '2026-10-01T18:00:30.000',
+        },
+        {
+          ...session('long', '2026-10-02T10:00:00.000Z', 0),
+          startedAt: '2026-10-02T18:00:00.000',
+          completedAt: '2026-10-02T18:10:40.000',
+        },
+      ]);
+      const { body } = await admin.get(`/api/admin/users/${id}`).expect(200);
+      expect(body.recentSessions).toMatchObject([
+        { id: 'long', completedAt: '2026-10-02T18:10:40.000', minutes: 10 },
+        { id: 'short', completedAt: '2026-10-01T18:00:30.000', minutes: 1 },
+      ]);
+      expect(body.totals.minutes).toBe(11);
+    });
+
     it('has no profile before the app synced one', async () => {
       const id = await createUser('g-1', 'new@example.com');
       const { body } = await admin.get(`/api/admin/users/${id}`).expect(200);
@@ -232,6 +255,9 @@ describe('Admin users (e2e)', () => {
     it('cuts a locked account off everywhere, and unlocking restores sign-in', async () => {
       const { body: session_ } = await signIn().expect(200);
       const id = session_.user.id as string;
+      const signedInAt = (await admin.get(`/api/admin/users/${id}`)).body
+        .lastSignInAt as string;
+      expect(Date.parse(signedInAt)).not.toBeNaN();
       const auth = { Authorization: `Bearer ${session_.accessToken}` };
       const server = app.getHttpServer();
 
@@ -265,6 +291,16 @@ describe('Admin users (e2e)', () => {
         .expect(401);
       const refused = await signIn().expect(403);
       expect(refused.body.message).toBe('Account is locked');
+      // A refused sign-in is not a sign-in.
+      expect(
+        (await admin.get(`/api/admin/users/${id}`)).body.lastSignInAt,
+      ).toBe(signedInAt);
+      // Not even self-service deletion goes through.
+      await request(server)
+        .delete('/api/me')
+        .set(auth)
+        .send({ idToken: GOOGLE_TOKEN })
+        .expect(401);
 
       await admin
         .patch(`/api/admin/users/${id}`, { disabled: false })
@@ -281,6 +317,17 @@ describe('Admin users (e2e)', () => {
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(401);
+    });
+
+    it('accepts an upper-case id', async () => {
+      const id = await createUser('g-1', 'one@example.com');
+      await docs.upsertMany(id, 'sessions', [
+        session('s1', '2026-10-01T10:00:00.000Z', 30),
+      ]);
+      const { body } = await admin
+        .patch(`/api/admin/users/${id.toUpperCase()}`, { disabled: true })
+        .expect(200);
+      expect(body).toMatchObject({ id, sessionCount: 1 });
     });
 
     it('validates the body and the id', async () => {

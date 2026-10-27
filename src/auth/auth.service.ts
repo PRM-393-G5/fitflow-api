@@ -26,6 +26,7 @@ export class AuthService {
     if (user.disabled) {
       throw new ForbiddenException('Account is locked');
     }
+    await this.users.recordSignIn(user.id as string);
     const tokens = await this.tokens.issue(user.id as string);
     return { ...tokens, user: UsersService.toProfile(user) };
   }

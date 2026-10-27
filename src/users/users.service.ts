@@ -65,7 +65,6 @@ export class UsersService implements OnModuleInit {
               // photo removed on Google is cleared here too.
               name: profile.name ?? null,
               photoUrl: profile.photoUrl ?? null,
-              lastSignInAt: new Date(),
             },
           },
           {
@@ -95,6 +94,13 @@ export class UsersService implements OnModuleInit {
   async findById(id: string): Promise<UserDocument | null> {
     if (!isObjectIdOrHexString(id)) return null;
     return this.users.findById(id).exec();
+  }
+
+  /** Stamps a sign-in that opened a session (not a refused one). */
+  async recordSignIn(id: string): Promise<void> {
+    await this.users
+      .updateOne({ _id: id }, { $set: { lastSignInAt: new Date() } })
+      .exec();
   }
 
   /**
