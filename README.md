@@ -99,7 +99,7 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | DELETE | `/api/admin/templates/:id` | 🛡 → `204`; `404` if unknown |
 | GET | `/api/admin/users` | 🛡 `?search=&status=all\|active\|locked&page=1&limit=20` (limit ≤ 100) → `{items, total, page, limit}`, newest first; each item `{id, email, name, photoUrl, disabled, createdAt, lastSignInAt, sessionCount}` (finished workouts, form checks excluded); search matches email or name, case-insensitive |
 | GET | `/api/admin/users/:id` | 🛡 The item above plus the synced `profile` (goal, level, weekly goal, height, age, sex, activity level; `null` until the app syncs one), live document `counts`, workout `totals` (minutes, volume), `latestWeightKg`, `lastSyncAt` and the 10 most recent sessions; `404` if unknown |
-| PATCH | `/api/admin/users/:id` | 🛡 Body `{disabled}`: `true` locks the account and ends all its sessions, `false` unlocks it → the list item |
+| PATCH | `/api/admin/users/:id` | 🛡 Body `{disabled}`: `true` locks the account, `false` unlocks it; either way all its sessions end (after an unlock the user signs in again) → the list item |
 | DELETE | `/api/admin/users/:id` | 🛡 Deletes the account, its sessions and every synced document → `204`; `404` if unknown |
 | POST | `/api/admin/templates/reorder` | 🛡 Body `{ids}` listing every template id exactly once (else `400`) → the list in the new order |
 
@@ -113,7 +113,9 @@ deletes its refresh tokens; from then on Google sign-in answers `403
 Account is locked`, refreshing fails with `401`, and every `/api/me`
 route answers `401 Account is locked` even for an access token issued
 before, so the app drops its session at once and lands on the sign-in
-page. Unlocking lets the user sign in again; their data is untouched.
+page. Unlocking lets the user sign in again (it also ends any session
+that raced the lock); their data is untouched. A locked user cannot
+delete their own account (they cannot sign in); an admin can.
 
 ### Template rules
 

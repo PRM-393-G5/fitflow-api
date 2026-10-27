@@ -229,6 +229,14 @@ describe('Admin users (e2e)', () => {
       expect(body.totals.minutes).toBe(11);
     });
 
+    it('counts a profile-only sync as the last sync', async () => {
+      const id = await createUser('g-1', 'meta@example.com');
+      const at = Date.now() - 60_000;
+      await users.putMeta(id, at, { weeklyGoal: 3 });
+      const { body } = await admin.get(`/api/admin/users/${id}`).expect(200);
+      expect(body.lastSyncAt).toBe(new Date(at).toISOString());
+    });
+
     it('has no profile before the app synced one', async () => {
       const id = await createUser('g-1', 'new@example.com');
       const { body } = await admin.get(`/api/admin/users/${id}`).expect(200);
@@ -302,9 +310,15 @@ describe('Admin users (e2e)', () => {
         .send({ idToken: GOOGLE_TOKEN })
         .expect(401);
 
+      // A refresh token that raced the lock dies with the unlock.
+      const { refreshToken: raced } = await app.get(TokensService).issue(id);
       await admin
         .patch(`/api/admin/users/${id}`, { disabled: false })
         .expect(200);
+      await request(server)
+        .post('/api/auth/refresh')
+        .send({ refreshToken: raced })
+        .expect(401);
       await signIn().expect(200);
     });
 

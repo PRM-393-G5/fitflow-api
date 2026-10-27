@@ -64,7 +64,7 @@ export interface AdminUserDetail extends AdminUserSummary {
   /** Over finished workouts, form checks excluded (as the app counts). */
   totals: { minutes: number; volumeKg: number };
   latestWeightKg: number | null;
-  /** When any synced document last changed. */
+  /** When a synced document or the profile meta last changed. */
   lastSyncAt: string | null;
   recentSessions: RecentSession[];
 }
@@ -156,10 +156,11 @@ export class AdminUsersService {
     const weights = live
       .filter((doc) => doc.kind === 'weights')
       .sort((a, b) => b.docId.localeCompare(a.docId));
+    const metaSync = user.metaUpdatedAt ? new Date(user.metaUpdatedAt) : null;
     const lastSync = docs.reduce<Date | null>(
       (latest, doc) =>
         !latest || doc.updatedAt > latest ? doc.updatedAt : latest,
-      null,
+      metaSync,
     );
 
     return {
@@ -188,8 +189,10 @@ export class AdminUsersService {
   }
 
   /**
-   * Locks or unlocks the account. Locking also ends every session: the
-   * app's next refresh fails and it returns to the sign-in page.
+   * Locks or unlocks the account, ending every session either way: after
+   * a lock the app's next request fails and it returns to the sign-in
+   * page. Revoking on unlock too means a refresh that raced the lock
+   * (issued just after the revocation) cannot quietly come back to life.
    */
   async setDisabled(
     id: string,
@@ -206,7 +209,7 @@ export class AdminUsersService {
       .lean<LeanUser>()
       .exec();
     if (!user) return null;
-    if (disabled) await this.tokens.revokeAll(id);
+    await this.tokens.revokeAll(user._id.toString());
     const counts = await this.sessionCounts([user._id]);
     return toSummary(user, counts.get(user._id.toString()) ?? 0);
   }
