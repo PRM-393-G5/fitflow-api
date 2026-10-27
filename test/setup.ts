@@ -12,4 +12,5 @@ process.env.GOOGLE_CLIENT_IDS ||= 'test-client-id.apps.googleusercontent.com';
 process.env.JWT_ACCESS_SECRET ||= 'test-secret-that-is-at-least-32-characters';
 process.env.AUTH_RATE_LIMIT ||= '10000';
 process.env.ADMIN_LOGIN_RATE_LIMIT ||= '10000';
+process.env.AI_RATE_LIMIT ||= '10000';
 process.env.SWAGGER_ENABLED ||= 'false';

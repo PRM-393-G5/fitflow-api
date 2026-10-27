@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { AuthenticatedRequest } from '../auth/jwt-auth.guard.js';
 import { UsersService } from './users.service.js';
 
@@ -13,7 +18,9 @@ export class ActiveUserGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    await this.users.requireActive(request.user.userId);
+    // Listed without JwtAuthGuard in front: refuse rather than crash.
+    if (!request.user) throw new UnauthorizedException('Missing bearer token');
+    await this.users.assertActive(request.user.userId);
     return true;
   }
 }

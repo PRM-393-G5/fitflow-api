@@ -96,6 +96,23 @@ export class UsersService implements OnModuleInit {
     return this.users.findById(id).exec();
   }
 
+  /** Like [requireActive], reading only the lock flag. */
+  async assertActive(id: string): Promise<void> {
+    const user = isObjectIdOrHexString(id)
+      ? await this.users.findById(id).select({ disabled: 1 }).lean().exec()
+      : null;
+    if (!user) throw new UnauthorizedException('Account no longer exists');
+    if (user.disabled) throw new UnauthorizedException('Account is locked');
+  }
+
+  /** Whether the account [id] exists. */
+  async exists(id: string): Promise<boolean> {
+    return (
+      isObjectIdOrHexString(id) &&
+      (await this.users.exists({ _id: id })) !== null
+    );
+  }
+
   /** Stamps a sign-in that opened a session (not a refused one). */
   async recordSignIn(id: string): Promise<void> {
     await this.users

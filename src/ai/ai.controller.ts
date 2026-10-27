@@ -1,3 +1,4 @@
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   Body,
   Controller,
@@ -17,6 +18,11 @@ import {
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { AuthUser } from '../auth/jwt-auth.guard.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import {
+  ADMIN_LOGIN_THROTTLER,
+  AUTH_THROTTLER,
+} from '../common/throttling/throttling.module.js';
+import { AiThrottlerGuard } from './ai-throttler.guard.js';
 import { ActiveUserGuard } from '../users/active-user.guard.js';
 import { AiUsageService } from './ai-usage.service.js';
 import { AiService } from './ai.service.js';
@@ -30,13 +36,14 @@ import {
 
 /**
  * AI features, for signed-in users with an active account (they spend the
- * server's OpenAI key). Every call except `status` is recorded for the
- * admin web under the caller.
+ * server's OpenAI key), at most AI_RATE_LIMIT calls a minute each. Every
+ * call except `status` is recorded for the admin web under the caller.
  */
 @ApiTags('ai')
 @ApiBearerAuth()
 @Controller('ai')
-@UseGuards(JwtAuthGuard, ActiveUserGuard)
+@UseGuards(JwtAuthGuard, ActiveUserGuard, AiThrottlerGuard)
+@SkipThrottle({ [AUTH_THROTTLER]: true, [ADMIN_LOGIN_THROTTLER]: true })
 export class AiController {
   constructor(
     private readonly ai: AiService,
