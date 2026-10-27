@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { OAuth2Client } from 'google-auth-library';
+import { AiModule } from '../ai/ai.module.js';
 import { UserDocsModule } from '../user-docs/user-docs.module.js';
 import { UsersModule } from '../users/users.module.js';
 import { AccountController } from './account.controller.js';
@@ -18,6 +19,7 @@ import { TokensService } from './tokens/tokens.service.js';
   imports: [
     UsersModule,
     UserDocsModule,
+    AiModule,
     MongooseModule.forFeature([
       { name: RefreshToken.name, schema: RefreshTokenSchema },
     ]),

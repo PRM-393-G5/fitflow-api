@@ -33,6 +33,21 @@ export class AiUsageService implements OnModuleInit, OnModuleDestroy {
     return this.idle();
   }
 
+  /**
+   * Detaches a deleted account from its usage records: the calls still
+   * count in totals, but no longer lead back to the person.
+   */
+  async forgetUser(userId: string): Promise<void> {
+    if (!isObjectIdOrHexString(userId)) return;
+    await this.idle();
+    await this.usage
+      .updateMany(
+        { userId: new Types.ObjectId(userId) },
+        { $set: { userId: null } },
+      )
+      .exec();
+  }
+
   /** Resolves once every record started so far has been written (or failed). */
   async idle(): Promise<void> {
     await Promise.all(this.pending);
