@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test, TestingModuleBuilder } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
+import { AdminsService } from '../src/admin/accounts/admins.service.js';
 import { AppModule } from '../src/app.module.js';
 import { APP_OPTIONS, configureApp } from '../src/app.setup.js';
 import { TokensService } from '../src/auth/tokens/tokens.service.js';
@@ -30,17 +31,53 @@ export async function signedInUser(app: INestApplication<App>, sub: string) {
     .get(UsersService)
     .upsertFromGoogle({ sub, email: `${sub}@example.com` });
   const { accessToken } = await app.get(TokensService).issue(user.id as string);
-  const auth = { Authorization: `Bearer ${accessToken}` };
-  const server = app.getHttpServer();
   return {
     userId: user.id as string,
     accessToken,
-    get: (path: string) => request(server).get(path).set(auth),
-    put: (path: string, body: unknown) =>
+    ...authorizedRequests(app, accessToken),
+  };
+}
+
+export const ADMIN_PASSWORD = 'admin-password-1';
+
+/**
+ * Creates (or resets) an admin, signs in through the login route and
+ * returns an authorised request helper for `/api/admin/*`.
+ */
+export async function signedInAdmin(
+  app: INestApplication<App>,
+  email = 'admin@example.com',
+) {
+  const { admin } = await app
+    .get(AdminsService)
+    .upsert(email, ADMIN_PASSWORD, 'Admin');
+  const login = await request(app.getHttpServer())
+    .post('/api/admin/auth/login')
+    .send({ email, password: ADMIN_PASSWORD })
+    .expect(200);
+  const accessToken = login.body.accessToken as string;
+  return {
+    adminId: admin.id as string,
+    accessToken,
+    ...authorizedRequests(app, accessToken),
+  };
+}
+
+/** Request builders that send `Authorization: Bearer [accessToken]`. */
+function authorizedRequests(app: INestApplication<App>, accessToken: string) {
+  const server = app.getHttpServer();
+  const auth = { Authorization: `Bearer ${accessToken}` };
+  const withBody =
+    (method: 'post' | 'put' | 'patch') => (path: string, body?: unknown) =>
       request(server)
-        .put(path)
+        [method](path)
         .set(auth)
-        .send(body as object),
+        .send(body as object);
+  return {
+    get: (path: string) => request(server).get(path).set(auth),
+    post: withBody('post'),
+    put: withBody('put'),
+    patch: withBody('patch'),
     delete: (path: string) => request(server).delete(path).set(auth),
   };
 }
