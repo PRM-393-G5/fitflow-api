@@ -2,6 +2,7 @@ import {
   HttpException,
   Injectable,
   Logger,
+  OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -12,8 +13,10 @@ import type { AiFeature } from './schemas/ai-usage.schema.js';
 
 /** Records every AI call (see [AiUsage]) for the admin web. */
 @Injectable()
-export class AiUsageService implements OnModuleInit {
+export class AiUsageService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AiUsageService.name);
+  /** Records still being written. */
+  private readonly pending = new Set<Promise<void>>();
 
   constructor(
     @InjectModel(AiUsage.name) private readonly usage: Model<AiUsage>,
@@ -25,10 +28,21 @@ export class AiUsageService implements OnModuleInit {
     await this.usage.createIndexes();
   }
 
+  /** Lets records in flight land before the connection closes. */
+  onModuleDestroy(): Promise<void> {
+    return this.idle();
+  }
+
+  /** Resolves once every record started so far has been written (or failed). */
+  async idle(): Promise<void> {
+    await Promise.all(this.pending);
+  }
+
   /**
    * Runs [call] and records its outcome and duration. The result or
-   * error is passed through unchanged; failing to record is only logged,
-   * so usage logging can never break an AI feature.
+   * error is passed through unchanged and never waits for the record to
+   * be written; failing to record is only logged, so usage logging can
+   * neither break nor slow down an AI feature.
    */
   async track<T>(
     feature: AiFeature,
@@ -38,12 +52,21 @@ export class AiUsageService implements OnModuleInit {
     const started = Date.now();
     try {
       const result = await call();
-      await this.record(feature, userId, null, started);
+      this.recordInBackground(feature, userId, null, started);
       return result;
     } catch (error) {
-      await this.record(feature, userId, aiErrorCode(error), started);
+      this.recordInBackground(feature, userId, aiErrorCode(error), started);
       throw error;
     }
+  }
+
+  private recordInBackground(
+    ...args: Parameters<AiUsageService['record']>
+  ): void {
+    const write = this.record(...args).finally(() =>
+      this.pending.delete(write),
+    );
+    this.pending.add(write);
   }
 
   private async record(

@@ -1,4 +1,4 @@
-import { statsRange } from './admin-stats.service.js';
+import { statsRange, zonedMidnight } from './admin-stats.service.js';
 
 describe('statsRange', () => {
   const now = new Date('2026-10-27T20:00:00Z');
@@ -38,5 +38,21 @@ describe('statsRange', () => {
       '2026-10-25',
       '2026-10-26',
     ]);
+  });
+});
+
+describe('zonedMidnight', () => {
+  it.each([
+    ['UTC', '2026-10-27', '2026-10-27T00:00:00.000Z'],
+    ['Asia/Ho_Chi_Minh', '2026-10-27', '2026-10-26T17:00:00.000Z'],
+    // The name browsers report for Vietnam, in any case.
+    ['Asia/Saigon', '2026-10-27', '2026-10-26T17:00:00.000Z'],
+    ['asia/ho_chi_minh', '2026-10-27', '2026-10-26T17:00:00.000Z'],
+    ['Asia/Kathmandu', '2026-10-27', '2026-10-26T18:15:00.000Z'],
+    // Los Angeles leaves daylight time at 02:00 on 2026-11-01.
+    ['America/Los_Angeles', '2026-11-01', '2026-11-01T07:00:00.000Z'],
+    ['America/Los_Angeles', '2026-11-02', '2026-11-02T08:00:00.000Z'],
+  ])('%s %s starts at %s', (tz, day, expected) => {
+    expect(zonedMidnight(day, tz).toISOString()).toBe(expected);
   });
 });

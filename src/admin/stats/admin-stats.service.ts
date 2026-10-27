@@ -10,8 +10,8 @@ import { User } from '../../users/schemas/user.schema.js';
 import { FORM_CHECK_WORKOUT_ID } from '../users/admin-users.service.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-/** The largest UTC offset in use (Kiribati, +14:00). */
-const MAX_UTC_OFFSET_MS = 14 * 60 * 60 * 1000;
+/** Every UTC offset in use is a whole number of quarter hours. */
+const BIN_MINUTES = 15;
 const RECENT_AI_CALLS = 50;
 const TOP_AI_USERS = 10;
 
@@ -116,18 +116,86 @@ export function statsRange(
   return { days, tz, from: dates[0], to: today, dates };
 }
 
-/**
- * A safe lower bound for `createdAt` filters: the earliest instant that
- * can still be on day [from] in any time zone. Rows before [from] in the
- * report's zone are dropped after bucketing by local day.
- */
-function earliestInstant(from: string): Date {
-  return new Date(Date.parse(`${from}T00:00:00Z`) - MAX_UTC_OFFSET_MS);
+const nextDay = (day: string) =>
+  new Date(Date.parse(`${day}T00:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
+
+/** Milliseconds [tz] is ahead of UTC at [instant]. */
+function utcOffsetMs(instant: number, tz: string): number {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+    })
+      .formatToParts(instant)
+      .map((part) => [part.type, Number(part.value)]),
+  );
+  const local = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+  );
+  return local - (instant - (instant % 1000));
 }
 
-/** `yyyy-mm-dd` of a Date field in [tz]. */
-const localDay = (field: string, tz: string) => ({
-  $dateToString: { format: '%Y-%m-%d', date: field, timezone: tz },
+/** The instant [day] (`yyyy-mm-dd`) starts in [tz]. */
+export function zonedMidnight(day: string, tz: string): Date {
+  const utcMidnight = Date.parse(`${day}T00:00:00Z`);
+  const guess = utcMidnight - utcOffsetMs(utcMidnight, tz);
+  // Re-read the offset at the guess: they differ only across a DST change.
+  return new Date(utcMidnight - utcOffsetMs(guess, tz));
+}
+
+/**
+ * Counts per quarter-hour (UTC) of a Date field. Days are worked out from
+ * these bins in JS with Intl, which knows every IANA zone name in any
+ * case — MongoDB's own `timezone` option rejects common ones such as the
+ * `Asia/Saigon` browsers report for Vietnam.
+ */
+const quarterHour = (field: string) => ({
+  $dateTrunc: { date: field, unit: 'minute', binSize: BIN_MINUTES },
+});
+
+interface Bin {
+  _id: Date;
+  count: number;
+  errors?: number;
+}
+
+/** Sums [bins] per local day of [tz]. */
+function byLocalDay(
+  bins: Bin[],
+  tz: string,
+): Map<string, { count: number; errors: number }> {
+  const format = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const days = new Map<string, { count: number; errors: number }>();
+  for (const bin of bins) {
+    const day = format.format(bin._id);
+    const entry = days.get(day) ?? { count: 0, errors: 0 };
+    entry.count += bin.count;
+    entry.errors += bin.errors ?? 0;
+    days.set(day, entry);
+  }
+  return days;
+}
+
+/** createdAt filter for the report's days, local midnight to midnight. */
+const window = (range: StatsRange) => ({
+  $gte: zonedMidnight(range.from, range.tz),
+  $lt: zonedMidnight(nextDay(range.to), range.tz),
 });
 
 /** A date parsed from an ISO string field, or null when it is not one. */
@@ -155,39 +223,41 @@ export class AdminStatsService {
    */
   async overview(days: number, tz: string): Promise<StatsOverview> {
     const { dates, ...range } = statsRange(days, tz);
-    const since = earliestInstant(range.from);
-    const [totalUsers, lockedUsers, signups, sessionRows, totalSessions] =
-      await Promise.all([
-        this.users.countDocuments().exec(),
-        this.users.countDocuments({ disabled: true }).exec(),
-        this.users
-          .aggregate<{ _id: string; count: number }>([
-            { $match: { createdAt: { $gte: since } } },
-            {
-              $group: {
-                _id: localDay('$createdAt', tz),
-                count: { $sum: 1 },
-              },
-            },
-          ])
-          .exec(),
-        this.sessionsByDay(range),
-        this.docs
-          .countDocuments({
-            kind: 'sessions',
-            deleted: false,
-            'data.workoutId': { $ne: FORM_CHECK_WORKOUT_ID },
-          })
-          .exec(),
-      ]);
-    const [aiRows, templateCount] = await Promise.all([
+    const createdAt = window(range);
+    const [
+      totalUsers,
+      lockedUsers,
+      signupBins,
+      sessionRows,
+      totalSessions,
+      aiBins,
+      templateCount,
+    ] = await Promise.all([
+      this.users.countDocuments().exec(),
+      this.users.countDocuments({ disabled: true }).exec(),
+      this.users
+        .aggregate<Bin>([
+          { $match: { createdAt } },
+          {
+            $group: { _id: quarterHour('$createdAt'), count: { $sum: 1 } },
+          },
+        ])
+        .exec(),
+      this.sessionsByDay(range),
+      this.docs
+        .countDocuments({
+          kind: 'sessions',
+          deleted: false,
+          'data.workoutId': { $ne: FORM_CHECK_WORKOUT_ID },
+        })
+        .exec(),
       this.usage
-        .aggregate<{ _id: string; calls: number; errors: number }>([
-          { $match: { createdAt: { $gte: since } } },
+        .aggregate<Bin>([
+          { $match: { createdAt } },
           {
             $group: {
-              _id: localDay('$createdAt', tz),
-              calls: { $sum: 1 },
+              _id: quarterHour('$createdAt'),
+              count: { $sum: 1 },
               errors: errorCount,
             },
           },
@@ -196,8 +266,8 @@ export class AdminStatsService {
       this.templates.countDocuments().exec(),
     ]);
 
-    const signupsByDay = new Map(signups.map((row) => [row._id, row.count]));
-    const aiByDay = new Map(aiRows.map((row) => [row._id, row]));
+    const signupsByDay = byLocalDay(signupBins, tz);
+    const aiByDay = byLocalDay(aiBins, tz);
     const workouts = new Map<string, number>();
     const formChecks = new Map<string, number>();
     const activeUsers = new Set<string>();
@@ -211,10 +281,10 @@ export class AdminStatsService {
 
     const daily = dates.map((date) => ({
       date,
-      newUsers: signupsByDay.get(date) ?? 0,
+      newUsers: signupsByDay.get(date)?.count ?? 0,
       sessions: workouts.get(date) ?? 0,
       formChecks: formChecks.get(date) ?? 0,
-      aiCalls: aiByDay.get(date)?.calls ?? 0,
+      aiCalls: aiByDay.get(date)?.count ?? 0,
       aiErrors: aiByDay.get(date)?.errors ?? 0,
     }));
     const total = (key: keyof Omit<DailyActivity, 'date'>) =>
@@ -243,19 +313,17 @@ export class AdminStatsService {
   async aiUsage(days: number, tz: string): Promise<AiUsageReport> {
     const { dates, ...range } = statsRange(days, tz);
     type Group = { calls: number; errors: number; avgMs: number | null };
-    const [facets] = await this.usage
+    const facetsQuery = this.usage
       .aggregate<{
         totals: Array<
           Group & { anonymous: number; users: Array<Types.ObjectId | null> }
         >;
         byFeature: Array<Group & { _id: AiFeature }>;
-        daily: Array<Group & { _id: string }>;
+        bins: Bin[];
         errors: Array<{ _id: string | null; count: number }>;
         topUsers: Array<{ _id: Types.ObjectId; calls: number }>;
       }>([
-        { $match: { createdAt: { $gte: earliestInstant(range.from) } } },
-        { $addFields: { day: localDay('$createdAt', tz) } },
-        { $match: { day: { $gte: range.from, $lte: range.to } } },
+        { $match: { createdAt: window(range) } },
         {
           $facet: {
             totals: [
@@ -283,9 +351,13 @@ export class AdminStatsService {
               },
               { $sort: { calls: -1, _id: 1 } },
             ],
-            daily: [
+            bins: [
               {
-                $group: { _id: '$day', calls: { $sum: 1 }, errors: errorCount },
+                $group: {
+                  _id: quarterHour('$createdAt'),
+                  count: { $sum: 1 },
+                  errors: errorCount,
+                },
               },
             ],
             errors: [
@@ -303,12 +375,15 @@ export class AdminStatsService {
         },
       ])
       .exec();
-    const recent = await this.usage
-      .find()
-      .sort({ createdAt: -1, _id: -1 })
-      .limit(RECENT_AI_CALLS)
-      .lean()
-      .exec();
+    const [[facets], recent] = await Promise.all([
+      facetsQuery,
+      this.usage
+        .find()
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(RECENT_AI_CALLS)
+        .lean()
+        .exec(),
+    ]);
 
     const people = await this.lookupUsers([
       ...facets.topUsers.map((row) => row._id),
@@ -322,7 +397,7 @@ export class AdminStatsService {
       };
 
     const totals = facets.totals[0];
-    const dailyByDay = new Map(facets.daily.map((row) => [row._id, row]));
+    const dailyByDay = byLocalDay(facets.bins, tz);
     const signedIn = (totals?.users ?? []).filter((id) => id !== null);
     return {
       range,
@@ -342,7 +417,7 @@ export class AdminStatsService {
       })),
       daily: dates.map((date) => ({
         date,
-        calls: dailyByDay.get(date)?.calls ?? 0,
+        calls: dailyByDay.get(date)?.count ?? 0,
         errors: dailyByDay.get(date)?.errors ?? 0,
       })),
       errorsByCode: facets.errors.map((row) => ({
@@ -396,7 +471,8 @@ export class AdminStatsService {
             },
           },
         },
-        // A phone whose clock runs ahead may report tomorrow.
+        // A phone in a zone ahead of the admin's can already be on a later
+        // day; its workouts count once that day starts for the admin.
         { $match: { day: { $lte: range.to } } },
         {
           $group: {

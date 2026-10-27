@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AiModule } from '../ai/ai.module.js';
-import { AiUsage, AiUsageSchema } from '../ai/schemas/ai-usage.schema.js';
 import { AuthModule } from '../auth/auth.module.js';
 import {
   WorkoutTemplate,
@@ -33,7 +32,6 @@ import { AdminUsersService } from './users/admin-users.service.js';
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: UserDoc.name, schema: UserDocSchema },
-      { name: AiUsage.name, schema: AiUsageSchema },
       { name: WorkoutTemplate.name, schema: WorkoutTemplateSchema },
     ]),
   ],
