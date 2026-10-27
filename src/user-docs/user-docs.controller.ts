@@ -9,7 +9,6 @@ import {
   Param,
   Put,
   Query,
-  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator.js';
@@ -37,13 +36,12 @@ export class UserDocsController {
   ) {}
 
   /**
-   * Access tokens outlive account deletion by up to 15 minutes; refuse
-   * writes for an account that is gone so no orphaned documents appear.
+   * Access tokens outlive account deletion or locking by up to 15
+   * minutes; refuse them so no orphaned documents appear and a locked
+   * account is cut off at once.
    */
   private async requireAccount(caller: AuthUser) {
-    if (!(await this.users.findById(caller.userId))) {
-      throw new UnauthorizedException('Account no longer exists');
-    }
+    await this.users.requireActive(caller.userId);
   }
 
   /**
@@ -53,16 +51,14 @@ export class UserDocsController {
    * query parameters are ignored.
    */
   @Get()
-  list(
+  async list(
     @CurrentUser() caller: AuthUser,
     @Param() params: KindParams,
-    @Query('since') since?: string,
+    @Query('since') sinceParam?: string,
   ): Promise<SyncedDoc[]> {
-    return this.docs.list(
-      caller.userId,
-      params.kind,
-      parseSince(params.kind, since),
-    );
+    const since = parseSince(params.kind, sinceParam);
+    await this.requireAccount(caller);
+    return this.docs.list(caller.userId, params.kind, since);
   }
 
   /** Bulk upsert: body `{docs: [{id, …}, …]}` (at most 500). */
