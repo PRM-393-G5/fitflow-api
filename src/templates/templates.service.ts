@@ -23,7 +23,8 @@ export interface TemplateJson {
 }
 
 /** What the admin web sees: the app's shape plus when it last changed. */
-export type AdminTemplateJson = TemplateJson & { updatedAt: string };
+/** `updatedAt` is null for documents written without timestamps. */
+export type AdminTemplateJson = TemplateJson & { updatedAt: string | null };
 
 export type TemplateFields = Omit<TemplateJson, 'id'>;
 
@@ -203,7 +204,7 @@ export class TemplatesService {
 function toAdminJson(doc: WorkoutTemplateDocument): AdminTemplateJson {
   return {
     ...(doc.toJSON() as unknown as TemplateJson),
-    updatedAt: doc.updatedAt.toISOString(),
+    updatedAt: doc.updatedAt?.toISOString() ?? null,
   };
 }
 
