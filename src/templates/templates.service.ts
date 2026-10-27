@@ -113,21 +113,24 @@ export class TemplatesService {
         ids.map((id, order) => ({
           updateOne: { filter: { _id: id }, update: { $set: { order } } },
         })),
+        // Moving a template is not editing it: keep updatedAt.
+        { timestamps: false },
       );
     }
     return this.findAllForAdmin();
   }
 
   /**
-   * Adds the [templates] whose id is not in the collection yet (at their
-   * seed position) and leaves the others alone, so admin edits survive a
-   * re-seed. A built-in template the admin deleted comes back.
+   * Loads [templates] into an empty collection; does nothing once any
+   * template exists, since from then on the admin web owns them (edits,
+   * deletions and order all survive). Upserts, so two concurrent first
+   * seeds cannot fail on duplicate ids.
    */
-  async insertMissing(
-    templates: TemplateJson[],
-  ): Promise<{ inserted: number }> {
+  async seedIfEmpty(templates: TemplateJson[]): Promise<{ inserted: number }> {
     const docs = await this.validated(templates);
-    if (docs.length === 0) return { inserted: 0 };
+    if (docs.length === 0 || (await this.templates.countDocuments()) > 0) {
+      return { inserted: 0 };
+    }
     const result = await this.templates.bulkWrite(
       docs.map((doc) => {
         const { _id, ...fields } = doc.toObject({ versionKey: false });
@@ -176,7 +179,10 @@ export class TemplatesService {
     return { upserted: templates.length, deleted: deletedCount };
   }
 
-  /** Seed data as validated documents (position = order); throws if bad. */
+  /**
+   * Seed data as validated documents (position = order), checked like
+   * admin input; throws if anything is wrong.
+   */
   private async validated(
     templates: TemplateJson[],
   ): Promise<WorkoutTemplateDocument[]> {
@@ -184,6 +190,7 @@ export class TemplatesService {
     if (new Set(ids).size !== ids.length) {
       throw new Error('Template ids must be unique');
     }
+    templates.forEach((template) => assertExercises(template.exercises));
     const docs = templates.map(
       ({ id, ...template }, order) =>
         new this.templates({ _id: id, ...template, order }),

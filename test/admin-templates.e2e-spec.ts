@@ -205,31 +205,59 @@ describe('Admin templates (e2e)', () => {
     expect(await model.exists({ _id: plan.id })).toBeNull();
   });
 
+  it('keeps updatedAt when only the order changes', async () => {
+    const before = (await admin.get('/api/admin/templates')).body;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const ids = before.map((item: { id: string }) => item.id).reverse();
+    const { body } = await admin
+      .post('/api/admin/templates/reorder', { ids })
+      .expect(200);
+    const updatedAt = (list: Array<{ id: string; updatedAt: string }>) =>
+      Object.fromEntries(list.map((item) => [item.id, item.updatedAt]));
+    expect(updatedAt(body)).toEqual(updatedAt(before));
+  });
+
   describe('seeding', () => {
-    it('adds only missing built-ins and keeps admin edits', async () => {
+    it('loads the built-ins only into an empty collection', async () => {
+      await model.deleteMany({});
+      expect(await templates.seedIfEmpty(WORKOUT_TEMPLATES)).toEqual({
+        inserted: WORKOUT_TEMPLATES.length,
+      });
+      expect(await publicIds()).toEqual(
+        WORKOUT_TEMPLATES.map((item) => item.id),
+      );
+    });
+
+    it('leaves admin edits, deletions and timestamps alone', async () => {
       const [first, second] = WORKOUT_TEMPLATES;
-      await admin.post('/api/admin/templates', plan).expect(201);
       const { id, ...fields } = first;
       void id;
       await admin
         .put(`/api/admin/templates/${first.id}`, { ...fields, name: 'Edited' })
         .expect(200);
       await admin.delete(`/api/admin/templates/${second.id}`).expect(204);
+      const before = await model.find().sort({ _id: 1 }).lean();
 
-      expect(await templates.insertMissing(WORKOUT_TEMPLATES)).toEqual({
-        inserted: 1,
-      });
-      const ids = await publicIds();
-      expect(ids).toContain(plan.id);
-      expect(ids).toContain(second.id);
-      const edited = await admin.get(`/api/admin/templates/${first.id}`);
-      expect(edited.body.name).toBe('Edited');
-    });
-
-    it('is a no-op when nothing is missing', async () => {
-      expect(await templates.insertMissing(WORKOUT_TEMPLATES)).toEqual({
+      expect(await templates.seedIfEmpty(WORKOUT_TEMPLATES)).toEqual({
         inserted: 0,
       });
+      const after = await model.find().sort({ _id: 1 }).lean();
+      expect(after).toEqual(before);
+      expect(await publicIds()).not.toContain(second.id);
+    });
+
+    it('validates seed data like admin input', async () => {
+      await model.deleteMany({});
+      const [first] = WORKOUT_TEMPLATES;
+      for (const bad of [
+        { ...first, level: 'Expert' },
+        { ...first, category: 'Yoga' },
+        { ...first, exercises: [first.exercises[0], first.exercises[0]] },
+      ]) {
+        await expect(templates.seedIfEmpty([bad])).rejects.toThrow();
+        await expect(templates.replaceAll([bad])).rejects.toThrow();
+      }
+      expect(await model.countDocuments()).toBe(0);
     });
   });
 });
