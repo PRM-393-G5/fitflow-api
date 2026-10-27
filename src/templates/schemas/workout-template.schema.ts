@@ -1,6 +1,10 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
+/** The levels and categories the app's filters and workout builder offer. */
+export const TEMPLATE_LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
+export const TEMPLATE_CATEGORIES = ['Strength', 'Cardio', 'Mobility'];
+
 /** The app casts these fields `as int`, so fractions would break parsing. */
 const integer = {
   validator: Number.isInteger,
