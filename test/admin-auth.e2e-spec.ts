@@ -94,11 +94,23 @@ describe('Admin auth (e2e)', () => {
     expect(await admins.countDocuments()).toBe(1);
   });
 
-  it('refuses short passwords and non-emails when creating admins', async () => {
+  it('signs the admin out everywhere when the password is reset', async () => {
+    const admin = await signedInAdmin(app);
+    await admin.get('/api/admin/me').expect(200);
+    await app
+      .get(AdminsService)
+      .upsert('admin@example.com', 'a-brand-new-password');
+    await admin.get('/api/admin/me').expect(401);
+  });
+
+  it('refuses passwords login would reject, and non-emails', async () => {
     const service = app.get(AdminsService);
     await expect(service.upsert('a@example.com', 'short')).rejects.toThrow(
-      'at least 8',
+      '8 to 128 characters',
     );
+    await expect(
+      service.upsert('a@example.com', 'x'.repeat(129)),
+    ).rejects.toThrow('8 to 128 characters');
     await expect(service.upsert('not-an-email', 'long-enough')).rejects.toThrow(
       'Not an email',
     );

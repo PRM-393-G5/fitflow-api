@@ -31,18 +31,10 @@ export async function signedInUser(app: INestApplication<App>, sub: string) {
     .get(UsersService)
     .upsertFromGoogle({ sub, email: `${sub}@example.com` });
   const { accessToken } = await app.get(TokensService).issue(user.id as string);
-  const auth = { Authorization: `Bearer ${accessToken}` };
-  const server = app.getHttpServer();
   return {
     userId: user.id as string,
     accessToken,
-    get: (path: string) => request(server).get(path).set(auth),
-    put: (path: string, body: unknown) =>
-      request(server)
-        .put(path)
-        .set(auth)
-        .send(body as object),
-    delete: (path: string) => request(server).delete(path).set(auth),
+    ...authorizedRequests(app, accessToken),
   };
 }
 
@@ -59,32 +51,33 @@ export async function signedInAdmin(
   const { admin } = await app
     .get(AdminsService)
     .upsert(email, ADMIN_PASSWORD, 'Admin');
-  const server = app.getHttpServer();
-  const login = await request(server)
+  const login = await request(app.getHttpServer())
     .post('/api/admin/auth/login')
     .send({ email, password: ADMIN_PASSWORD })
     .expect(200);
   const accessToken = login.body.accessToken as string;
-  const auth = { Authorization: `Bearer ${accessToken}` };
   return {
     adminId: admin.id as string,
     accessToken,
+    ...authorizedRequests(app, accessToken),
+  };
+}
+
+/** Request builders that send `Authorization: Bearer [accessToken]`. */
+function authorizedRequests(app: INestApplication<App>, accessToken: string) {
+  const server = app.getHttpServer();
+  const auth = { Authorization: `Bearer ${accessToken}` };
+  const withBody =
+    (method: 'post' | 'put' | 'patch') => (path: string, body?: unknown) =>
+      request(server)
+        [method](path)
+        .set(auth)
+        .send(body as object);
+  return {
     get: (path: string) => request(server).get(path).set(auth),
-    post: (path: string, body?: unknown) =>
-      request(server)
-        .post(path)
-        .set(auth)
-        .send(body as object),
-    put: (path: string, body: unknown) =>
-      request(server)
-        .put(path)
-        .set(auth)
-        .send(body as object),
-    patch: (path: string, body: unknown) =>
-      request(server)
-        .patch(path)
-        .set(auth)
-        .send(body as object),
+    post: withBody('post'),
+    put: withBody('put'),
+    patch: withBody('patch'),
     delete: (path: string) => request(server).delete(path).set(auth),
   };
 }

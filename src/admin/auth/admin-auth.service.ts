@@ -11,6 +11,13 @@ import { AdminProfile, AdminsService } from '../accounts/admins.service.js';
  */
 export const ADMIN_TOKEN_AUDIENCE = 'fitflow-admin';
 
+/** Claims of an admin access token (plus `iss`/`aud`/`exp`). */
+export interface AdminTokenPayload {
+  sub: string;
+  /** The admin's `tokenVersion` when the token was issued. */
+  ver: number;
+}
+
 export interface AdminLoginResult {
   accessToken: string;
   /** Seconds until [accessToken] expires. */
@@ -38,10 +45,14 @@ export class AdminAuthService {
     const admin = await this.admins.verifyCredentials(email, password);
     if (!admin) throw new UnauthorizedException('Invalid email or password');
     await this.admins.recordLogin(admin.id as string);
-    const accessToken = await this.jwt.signAsync(
-      { sub: admin.id as string },
-      { audience: ADMIN_TOKEN_AUDIENCE, expiresIn: this.ttl },
-    );
+    const payload: AdminTokenPayload = {
+      sub: admin.id as string,
+      ver: admin.tokenVersion,
+    };
+    const accessToken = await this.jwt.signAsync(payload, {
+      audience: ADMIN_TOKEN_AUDIENCE,
+      expiresIn: this.ttl,
+    });
     return {
       accessToken,
       expiresIn: this.ttl,

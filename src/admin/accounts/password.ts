@@ -7,6 +7,8 @@ const P = 1;
 const KEY_LENGTH = 64;
 
 export const MIN_PASSWORD_LENGTH = 8;
+/** Login refuses longer passwords, so none may be set either. */
+export const MAX_PASSWORD_LENGTH = 128;
 
 function derive(
   password: string,
