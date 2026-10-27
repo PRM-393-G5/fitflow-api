@@ -7,6 +7,8 @@ import { EnvironmentVariables } from '../../config/env.validation.js';
 export const AUTH_THROTTLER = 'auth';
 /** The admin web's password login. */
 export const ADMIN_LOGIN_THROTTLER = 'admin-login';
+/** The AI routes, counted per user (AiThrottlerGuard), not per IP. */
+export const AI_THROTTLER = 'ai';
 
 /**
  * Rate limits for routes that talk to Google, check passwords or mint
@@ -33,6 +35,11 @@ export const ADMIN_LOGIN_THROTTLER = 'admin-login';
             name: ADMIN_LOGIN_THROTTLER,
             ttl: 60_000,
             limit: config.get('ADMIN_LOGIN_RATE_LIMIT', { infer: true }),
+          },
+          {
+            name: AI_THROTTLER,
+            ttl: 60_000,
+            limit: config.get('AI_RATE_LIMIT', { infer: true }),
           },
         ],
         generateKey: (_context, tracker, throttlerName) =>

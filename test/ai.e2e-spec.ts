@@ -9,6 +9,8 @@ import type { Model } from 'mongoose';
 import { AiUsageService } from '../src/ai/ai-usage.service.js';
 import { AiService } from '../src/ai/ai.service.js';
 import { AiUsage } from '../src/ai/schemas/ai-usage.schema.js';
+import { User } from '../src/users/schemas/user.schema.js';
+import { UsersService } from '../src/users/users.service.js';
 import { EnvironmentVariables } from '../src/config/env.validation.js';
 import { createTestApp, signedInUser } from './helpers.js';
 
@@ -19,6 +21,8 @@ describe('/api/ai (e2e)', () => {
   let nextStatus = 200;
   let nextBody: unknown = {};
   let lastRequestBody: Record<string, unknown> | null = null;
+  /** The signed-in user the requests are sent as. */
+  let caller: Awaited<ReturnType<typeof signedInUser>>;
 
   beforeAll(async () => {
     mockOpenAi = createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -56,6 +60,7 @@ describe('/api/ai (e2e)', () => {
     app = await createTestApp((builder) =>
       builder.overrideProvider(AiService).useValue(new AiService(fakeConfig)),
     );
+    caller = await signedInUser(app, 'ai-e2e-caller');
   });
 
   afterAll(async () => {
@@ -64,9 +69,7 @@ describe('/api/ai (e2e)', () => {
   });
 
   it('GET /api/ai/status reports configured=true and model name', async () => {
-    const res = await request(app.getHttpServer())
-      .get('/api/ai/status')
-      .expect(200);
+    const res = await caller.get('/api/ai/status').expect(200);
     expect(res.body).toEqual({
       configured: true,
       model: 'gpt-6-luna',
@@ -89,7 +92,7 @@ describe('/api/ai (e2e)', () => {
       ],
     };
 
-    const res = await request(app.getHttpServer())
+    const res = await caller
       .post('/api/ai/generate')
       .send({
         system: 'You are a coach.',
@@ -132,7 +135,7 @@ describe('/api/ai (e2e)', () => {
       ],
     };
 
-    const workoutRes = await request(app.getHttpServer())
+    const workoutRes = await caller
       .post('/api/ai/workout-plan')
       .send({
         request: 'Push day with dumbbells',
@@ -156,7 +159,7 @@ describe('/api/ai (e2e)', () => {
         },
       ],
     };
-    const mealRes = await request(app.getHttpServer())
+    const mealRes = await caller
       .post('/api/ai/meal-plan')
       .send({ targetKcal: 2000, proteinG: 150, meals: 3 })
       .expect(200);
@@ -183,7 +186,7 @@ describe('/api/ai (e2e)', () => {
         },
       ],
     };
-    const photoRes = await request(app.getHttpServer())
+    const photoRes = await caller
       .post('/api/ai/food-photo')
       .send({
         imageBase64: Buffer.from([0xff, 0xd8, 0xff, 0xe0]).toString('base64'),
@@ -204,7 +207,7 @@ describe('/api/ai (e2e)', () => {
         },
       ],
     };
-    const formRes = await request(app.getHttpServer())
+    const formRes = await caller
       .post('/api/ai/form-review')
       .send({
         exercise: 'Squat',
@@ -232,7 +235,7 @@ describe('/api/ai (e2e)', () => {
         },
       ],
     };
-    const refused = await request(app.getHttpServer())
+    const refused = await caller
       .post('/api/ai/generate')
       .send({
         system: 'sys',
@@ -251,7 +254,7 @@ describe('/api/ai (e2e)', () => {
         },
       ],
     };
-    const tooLong = await request(app.getHttpServer())
+    const tooLong = await caller
       .post('/api/ai/generate')
       .send({
         system: 'sys',
@@ -264,7 +267,7 @@ describe('/api/ai (e2e)', () => {
 
     nextStatus = 429;
     nextBody = { error: { message: 'Rate limit exceeded' } };
-    const rateLimited = await request(app.getHttpServer())
+    const rateLimited = await caller
       .post('/api/ai/generate')
       .send({
         system: 'sys',
@@ -287,20 +290,18 @@ describe('/api/ai (e2e)', () => {
       ],
     };
     const review = () =>
-      request(app.getHttpServer())
-        .post('/api/ai/form-review')
-        .send({
-          exercise: 'Squat',
-          reps: [
-            {
-              number: 1,
-              minKneeAngle: 82,
-              descentMs: 1100,
-              ascentMs: 900,
-              faults: [],
-            },
-          ],
-        });
+      caller.post('/api/ai/form-review').send({
+        exercise: 'Squat',
+        reps: [
+          {
+            number: 1,
+            minKneeAngle: 82,
+            descentMs: 1100,
+            ascentMs: 900,
+            faults: [],
+          },
+        ],
+      });
 
     let usageService: AiUsageService;
 
@@ -323,11 +324,11 @@ describe('/api/ai (e2e)', () => {
       nextBody = okBody;
     });
 
-    it('records an anonymous call without its content', async () => {
+    it('records the call under the caller, without its content', async () => {
       await review().expect(200);
       const [entry] = await logged();
+      expect(entry.userId?.toString()).toBe(caller.userId);
       expect(entry).toMatchObject({
-        userId: null,
         feature: 'form-review',
         model: 'gpt-6-luna',
         ok: true,
@@ -349,19 +350,50 @@ describe('/api/ai (e2e)', () => {
       );
     });
 
-    it('attributes the call to a signed-in caller', async () => {
-      const user = await signedInUser(app, 'ai-usage-user');
-      await review()
-        .set('Authorization', `Bearer ${user.accessToken}`)
-        .expect(200);
-      const [entry] = await logged();
-      expect(entry.userId?.toString()).toBe(user.userId);
+    it('refuses a deleted account and logs nothing', async () => {
+      const gone = await signedInUser(app, 'ai-e2e-gone');
+      await app.get(UsersService).remove(gone.userId);
+      const res = await gone
+        .post('/api/ai/workout-plan', { request: 'legs' })
+        .expect(401);
+      expect(res.body.message).toBe('Account no longer exists');
+      expect(await logged()).toHaveLength(0);
     });
 
-    it('still serves a caller with an invalid token, anonymously', async () => {
-      await review().set('Authorization', 'Bearer not-a-jwt').expect(200);
+    it('logs a call whose account is gone by then without its user', async () => {
+      const gone = await signedInUser(app, 'ai-e2e-deleted-mid-call');
+      await usageService.track('meal-plan', gone.userId, async () => {
+        // The account is deleted while the AI call runs.
+        await app.get(UsersService).remove(gone.userId);
+        return {};
+      });
       const [entry] = await logged();
       expect(entry.userId).toBeNull();
+    });
+
+    it('refuses callers without a valid token or an active account', async () => {
+      const server = app.getHttpServer();
+      const body = { request: 'legs' };
+      await request(server).post('/api/ai/workout-plan').send(body).expect(401);
+      await request(server)
+        .post('/api/ai/workout-plan')
+        .set('Authorization', 'Bearer not-a-jwt')
+        .send(body)
+        .expect(401);
+      await request(server).get('/api/ai/status').expect(401);
+
+      const locked = await signedInUser(app, 'ai-e2e-locked');
+      await app
+        .get<Model<User>>(getModelToken(User.name))
+        .updateOne({ _id: locked.userId }, { $set: { disabled: true } });
+      const res = await request(server)
+        .post('/api/ai/workout-plan')
+        .set('Authorization', `Bearer ${locked.accessToken}`)
+        .send(body)
+        .expect(401);
+      expect(res.body.message).toBe('Account is locked');
+      await usageService.idle();
+      expect(await usage.countDocuments()).toBe(0);
     });
 
     it('records failures with the code the app sees', async () => {
@@ -374,11 +406,8 @@ describe('/api/ai (e2e)', () => {
     });
 
     it('does not record rejected requests or status checks', async () => {
-      await request(app.getHttpServer())
-        .post('/api/ai/form-review')
-        .send({})
-        .expect(400);
-      await request(app.getHttpServer()).get('/api/ai/status').expect(200);
+      await caller.post('/api/ai/form-review').send({}).expect(400);
+      await caller.get('/api/ai/status').expect(200);
       // A logged call afterwards is the only entry.
       await review().expect(200);
       expect(await logged()).toHaveLength(1);

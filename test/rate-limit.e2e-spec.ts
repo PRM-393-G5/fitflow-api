@@ -6,11 +6,13 @@ describe('Auth rate limit (e2e)', () => {
   let app: INestApplication<App>;
   const previous = process.env.AUTH_RATE_LIMIT;
   const previousAdmin = process.env.ADMIN_LOGIN_RATE_LIMIT;
+  const previousAi = process.env.AI_RATE_LIMIT;
 
   beforeAll(async () => {
     // Must be set before AppModule (and its ConfigModule) is loaded.
     process.env.AUTH_RATE_LIMIT = '3';
     process.env.ADMIN_LOGIN_RATE_LIMIT = '2';
+    process.env.AI_RATE_LIMIT = '2';
     const { createTestApp } = await import('./helpers.js');
     app = await createTestApp();
   });
@@ -19,6 +21,7 @@ describe('Auth rate limit (e2e)', () => {
     await app?.close();
     process.env.AUTH_RATE_LIMIT = previous;
     process.env.ADMIN_LOGIN_RATE_LIMIT = previousAdmin;
+    process.env.AI_RATE_LIMIT = previousAi;
   });
 
   it('shares one AUTH_RATE_LIMIT budget across the auth routes', async () => {
@@ -70,6 +73,28 @@ describe('Auth rate limit (e2e)', () => {
         .send({ refreshToken: 'x'.repeat(43) })
         .expect(429);
       await login().expect(429);
+    } finally {
+      await fresh.close();
+    }
+  });
+
+  it('limits AI calls per user, not per IP', async () => {
+    const { createTestApp, signedInUser } = await import('./helpers.js');
+    const fresh = await createTestApp();
+    try {
+      const first = await signedInUser(fresh, 'rate-ai-1');
+      const second = await signedInUser(fresh, 'rate-ai-2');
+      // Validation fails (400) after the guards: each call still counts.
+      await first.post('/api/ai/workout-plan', {}).expect(400);
+      await first.post('/api/ai/workout-plan', {}).expect(400);
+      await first.post('/api/ai/workout-plan', {}).expect(429);
+      // Same IP, another user: their own budget.
+      await second.post('/api/ai/workout-plan', {}).expect(400);
+      // AI traffic leaves the sign-in budget alone.
+      await request(fresh.getHttpServer())
+        .post('/api/auth/refresh')
+        .send({ refreshToken: 'x'.repeat(43) })
+        .expect(401);
     } finally {
       await fresh.close();
     }

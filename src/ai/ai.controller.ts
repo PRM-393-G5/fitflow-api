@@ -1,3 +1,4 @@
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   Body,
   Controller,
@@ -8,6 +9,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBadGatewayResponse,
+  ApiBearerAuth,
   ApiOkResponse,
   ApiOperation,
   ApiServiceUnavailableResponse,
@@ -15,7 +17,14 @@ import {
 } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { AuthUser } from '../auth/jwt-auth.guard.js';
-import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
+import {
+  ADMIN_LOGIN_THROTTLER,
+  AI_THROTTLER,
+  AUTH_THROTTLER,
+} from '../common/throttling/throttling.module.js';
+import { AiThrottlerGuard } from './ai-throttler.guard.js';
+import { ActiveUserGuard } from '../users/active-user.guard.js';
 import { AiUsageService } from './ai-usage.service.js';
 import { AiService } from './ai.service.js';
 import {
@@ -27,12 +36,16 @@ import {
 } from './dto/ai.dto.js';
 
 /**
- * AI features. Every call except `status` is recorded for the admin web,
- * attributed to the caller when the request carries a valid access token.
+ * AI features, for signed-in users with an active account (they spend the
+ * server's OpenAI key), at most AI_RATE_LIMIT calls a minute each. Every
+ * call except `status` is recorded for the admin web under the caller.
  */
 @ApiTags('ai')
+@ApiBearerAuth()
 @Controller('ai')
-@UseGuards(OptionalJwtAuthGuard)
+// Throttle before the account lookup, so a flood never reaches MongoDB.
+@UseGuards(JwtAuthGuard, AiThrottlerGuard, ActiveUserGuard)
+@SkipThrottle({ [AUTH_THROTTLER]: true, [ADMIN_LOGIN_THROTTLER]: true })
 export class AiController {
   constructor(
     private readonly ai: AiService,
@@ -40,6 +53,8 @@ export class AiController {
   ) {}
 
   @Get('status')
+  // Spends no OpenAI tokens: not part of the AI budget.
+  @SkipThrottle({ [AI_THROTTLER]: true })
   @ApiOperation({
     summary: 'Check whether the server has an OpenAI API key configured',
   })
@@ -58,11 +73,8 @@ export class AiController {
   @ApiOkResponse({ description: 'Parsed JSON object matching the schema.' })
   @ApiServiceUnavailableResponse({ description: 'OpenAI key not configured.' })
   @ApiBadGatewayResponse({ description: 'Upstream OpenAI failure.' })
-  generateJson(
-    @CurrentUser() caller: AuthUser | undefined,
-    @Body() dto: GenerateJsonDto,
-  ) {
-    return this.usage.track('generate', caller?.userId ?? null, () =>
+  generateJson(@CurrentUser() caller: AuthUser, @Body() dto: GenerateJsonDto) {
+    return this.usage.track('generate', caller.userId, () =>
       this.ai.generateJson(dto),
     );
   }
@@ -74,10 +86,10 @@ export class AiController {
   })
   @ApiOkResponse({ description: 'Generated workout plan JSON.' })
   generateWorkoutPlan(
-    @CurrentUser() caller: AuthUser | undefined,
+    @CurrentUser() caller: AuthUser,
     @Body() dto: GenerateWorkoutPlanDto,
   ) {
-    return this.usage.track('workout-plan', caller?.userId ?? null, () =>
+    return this.usage.track('workout-plan', caller.userId, () =>
       this.ai.generateWorkoutPlan(dto),
     );
   }
@@ -89,10 +101,10 @@ export class AiController {
   })
   @ApiOkResponse({ description: 'Generated meal plan JSON.' })
   generateMealPlan(
-    @CurrentUser() caller: AuthUser | undefined,
+    @CurrentUser() caller: AuthUser,
     @Body() dto: GenerateMealPlanDto,
   ) {
-    return this.usage.track('meal-plan', caller?.userId ?? null, () =>
+    return this.usage.track('meal-plan', caller.userId, () =>
       this.ai.generateMealPlan(dto),
     );
   }
@@ -105,10 +117,10 @@ export class AiController {
   })
   @ApiOkResponse({ description: 'Detected dishes and macro estimates.' })
   analyzeFoodPhoto(
-    @CurrentUser() caller: AuthUser | undefined,
+    @CurrentUser() caller: AuthUser,
     @Body() dto: AnalyzeFoodPhotoDto,
   ) {
-    return this.usage.track('food-photo', caller?.userId ?? null, () =>
+    return this.usage.track('food-photo', caller.userId, () =>
       this.ai.analyzeFoodPhoto(dto),
     );
   }
@@ -119,11 +131,8 @@ export class AiController {
     summary: 'Review rep-by-rep pose telemetry and return coaching cues',
   })
   @ApiOkResponse({ description: 'Coaching summary and actionable tips.' })
-  reviewForm(
-    @CurrentUser() caller: AuthUser | undefined,
-    @Body() dto: ReviewFormDto,
-  ) {
-    return this.usage.track('form-review', caller?.userId ?? null, () =>
+  reviewForm(@CurrentUser() caller: AuthUser, @Body() dto: ReviewFormDto) {
+    return this.usage.track('form-review', caller.userId, () =>
       this.ai.reviewForm(dto),
     );
   }

@@ -55,6 +55,11 @@ export class EnvironmentVariables {
   @Min(300)
   ADMIN_TOKEN_TTL_SECONDS: number = 28800;
 
+  /** AI requests per minute per signed-in user (own budget). */
+  @IsInt()
+  @Min(1)
+  AI_RATE_LIMIT: number = 20;
+
   /** Admin login attempts per minute per client IP (own budget). */
   @IsInt()
   @Min(1)
