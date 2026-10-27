@@ -4,6 +4,7 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import { AiUsageService } from '../ai/ai-usage.service.js';
 import { UserDocsService } from '../user-docs/user-docs.service.js';
 import { GoogleProfile, UsersService } from '../users/users.service.js';
 import { GoogleVerifier } from './google-verifier.service.js';
@@ -22,6 +23,7 @@ export class AccountService {
     private readonly users: UsersService,
     private readonly tokens: TokensService,
     private readonly docs: UserDocsService,
+    private readonly aiUsage: AiUsageService,
   ) {}
 
   /**
@@ -44,7 +46,8 @@ export class AccountService {
   }
 
   /**
-   * Deletes the account, its sessions and every synced document, without
+   * Deletes the account, its sessions and every synced document (and
+   * detaches its AI usage records from it), without
    * re-authentication (account deletion above, and admins). False when
    * the account did not exist.
    */
@@ -53,6 +56,7 @@ export class AccountService {
     try {
       await this.tokens.revokeAll(userId);
       await this.docs.removeAllForUser(userId);
+      await this.aiUsage.forgetUser(userId);
     } catch (error) {
       // The account is gone; leftovers are only reachable by userId.
       this.logger.error(
