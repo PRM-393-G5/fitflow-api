@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { AdminModule } from './admin/admin.module.js';
 import { AiModule } from './ai/ai.module.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
@@ -29,6 +30,7 @@ import { UsersModule } from './users/users.module.js';
     TemplatesModule,
     UserDocsModule,
     AiModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

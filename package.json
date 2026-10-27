@@ -15,6 +15,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "seed": "node dist/seed.js",
+    "admin:create": "node dist/create-admin.js",
     "lint": "oxlint src/ test/",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
