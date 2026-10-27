@@ -114,7 +114,8 @@ Account is locked`), at most `AI_RATE_LIMIT` calls a minute per user. Every call
 for the admin web: caller, feature, model, success or the error code the
 app saw, and duration. Prompts, photos and answers are never stored;
 entries expire after 180 days, and deleting an account detaches its
-entries (`userId` becomes null).
+entries (`userId` becomes null) — so the AI report's `anonymousCalls`
+are calls from since-deleted accounts.
 
 ### Locked accounts
 
