@@ -4,9 +4,13 @@ import { createServer, IncomingMessage, Server, ServerResponse } from 'http';
 import type { AddressInfo } from 'net';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
+import { getModelToken } from '@nestjs/mongoose';
+import type { Model } from 'mongoose';
+import { AiUsageService } from '../src/ai/ai-usage.service.js';
 import { AiService } from '../src/ai/ai.service.js';
+import { AiUsage } from '../src/ai/schemas/ai-usage.schema.js';
 import { EnvironmentVariables } from '../src/config/env.validation.js';
-import { createTestApp } from './helpers.js';
+import { createTestApp, signedInUser } from './helpers.js';
 
 describe('/api/ai (e2e)', () => {
   let app: INestApplication<App>;
@@ -270,5 +274,114 @@ describe('/api/ai (e2e)', () => {
       })
       .expect(429);
     expect(rateLimited.body.message).toBe('rate-limited');
+  });
+
+  describe('usage log', () => {
+    let usage: Model<AiUsage>;
+    const okBody = {
+      choices: [
+        {
+          finish_reason: 'stop',
+          message: { content: JSON.stringify({ summary: 'ok', tips: [] }) },
+        },
+      ],
+    };
+    const review = () =>
+      request(app.getHttpServer())
+        .post('/api/ai/form-review')
+        .send({
+          exercise: 'Squat',
+          reps: [
+            {
+              number: 1,
+              minKneeAngle: 82,
+              descentMs: 1100,
+              ascentMs: 900,
+              faults: [],
+            },
+          ],
+        });
+
+    let usageService: AiUsageService;
+
+    /** Entries are written after the response: wait for them. */
+    const logged = async () => {
+      await usageService.idle();
+      return usage.find().lean();
+    };
+
+    beforeAll(() => {
+      usage = app.get(getModelToken(AiUsage.name));
+      usageService = app.get(AiUsageService);
+    });
+
+    beforeEach(async () => {
+      // Earlier tests' calls may still be writing their entries.
+      await usageService.idle();
+      await usage.deleteMany({});
+      nextStatus = 200;
+      nextBody = okBody;
+    });
+
+    it('records an anonymous call without its content', async () => {
+      await review().expect(200);
+      const [entry] = await logged();
+      expect(entry).toMatchObject({
+        userId: null,
+        feature: 'form-review',
+        model: 'gpt-6-luna',
+        ok: true,
+        errorCode: null,
+      });
+      expect(entry.durationMs).toBeGreaterThanOrEqual(0);
+      expect(Object.keys(entry).sort()).toEqual(
+        [
+          '__v',
+          '_id',
+          'createdAt',
+          'durationMs',
+          'errorCode',
+          'feature',
+          'model',
+          'ok',
+          'userId',
+        ].sort(),
+      );
+    });
+
+    it('attributes the call to a signed-in caller', async () => {
+      const user = await signedInUser(app, 'ai-usage-user');
+      await review()
+        .set('Authorization', `Bearer ${user.accessToken}`)
+        .expect(200);
+      const [entry] = await logged();
+      expect(entry.userId?.toString()).toBe(user.userId);
+    });
+
+    it('still serves a caller with an invalid token, anonymously', async () => {
+      await review().set('Authorization', 'Bearer not-a-jwt').expect(200);
+      const [entry] = await logged();
+      expect(entry.userId).toBeNull();
+    });
+
+    it('records failures with the code the app sees', async () => {
+      nextStatus = 429;
+      nextBody = { error: { message: 'slow down' } };
+      const res = await review().expect(429);
+      expect(res.body.message).toBe('rate-limited');
+      const [entry] = await logged();
+      expect(entry).toMatchObject({ ok: false, errorCode: 'rate-limited' });
+    });
+
+    it('does not record rejected requests or status checks', async () => {
+      await request(app.getHttpServer())
+        .post('/api/ai/form-review')
+        .send({})
+        .expect(400);
+      await request(app.getHttpServer()).get('/api/ai/status').expect(200);
+      // A logged call afterwards is the only entry.
+      await review().expect(200);
+      expect(await logged()).toHaveLength(1);
+    });
   });
 });

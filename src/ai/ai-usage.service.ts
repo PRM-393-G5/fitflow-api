@@ -1,0 +1,127 @@
+import {
+  HttpException,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { isObjectIdOrHexString, Model, Types } from 'mongoose';
+import { AiService } from './ai.service.js';
+import { AiUsage } from './schemas/ai-usage.schema.js';
+import type { AiFeature } from './schemas/ai-usage.schema.js';
+
+/** Records every AI call (see [AiUsage]) for the admin web. */
+@Injectable()
+export class AiUsageService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(AiUsageService.name);
+  /** Records still being written. */
+  private readonly pending = new Set<Promise<void>>();
+
+  constructor(
+    @InjectModel(AiUsage.name) private readonly usage: Model<AiUsage>,
+    private readonly ai: AiService,
+  ) {}
+
+  /** The TTL index must exist for old entries to expire. */
+  async onModuleInit() {
+    await this.usage.createIndexes();
+  }
+
+  /** Lets records in flight land before the connection closes. */
+  onModuleDestroy(): Promise<void> {
+    return this.idle();
+  }
+
+  /**
+   * Detaches a deleted account from its usage records: the calls still
+   * count in totals, but no longer lead back to the person.
+   */
+  async forgetUser(userId: string): Promise<void> {
+    if (!isObjectIdOrHexString(userId)) return;
+    await this.idle();
+    await this.usage
+      .updateMany(
+        { userId: new Types.ObjectId(userId) },
+        { $set: { userId: null } },
+      )
+      .exec();
+  }
+
+  /** Resolves once every record started so far has been written (or failed). */
+  async idle(): Promise<void> {
+    await Promise.all(this.pending);
+  }
+
+  /**
+   * Runs [call] and records its outcome and duration. The result or
+   * error is passed through unchanged and never waits for the record to
+   * be written; failing to record is only logged, so usage logging can
+   * neither break nor slow down an AI feature.
+   */
+  async track<T>(
+    feature: AiFeature,
+    userId: string | null,
+    call: () => Promise<T>,
+  ): Promise<T> {
+    const started = Date.now();
+    try {
+      const result = await call();
+      this.recordInBackground(feature, userId, null, started);
+      return result;
+    } catch (error) {
+      this.recordInBackground(feature, userId, aiErrorCode(error), started);
+      throw error;
+    }
+  }
+
+  private recordInBackground(
+    ...args: Parameters<AiUsageService['record']>
+  ): void {
+    const write = this.record(...args).finally(() =>
+      this.pending.delete(write),
+    );
+    this.pending.add(write);
+  }
+
+  private async record(
+    feature: AiFeature,
+    userId: string | null,
+    errorCode: string | null,
+    started: number,
+  ): Promise<void> {
+    try {
+      await this.usage.create({
+        userId:
+          userId && isObjectIdOrHexString(userId)
+            ? new Types.ObjectId(userId)
+            : null,
+        feature,
+        model: this.ai.getStatus().model,
+        ok: errorCode === null,
+        errorCode,
+        durationMs: Date.now() - started,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Could not record AI usage: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+}
+
+/**
+ * The code the app receives for a failed AI call: AiService throws
+ * HttpExceptions whose message is a stable code (`rate-limited`, …).
+ */
+export function aiErrorCode(error: unknown): string {
+  if (error instanceof HttpException) {
+    const response = error.getResponse();
+    const message =
+      typeof response === 'string'
+        ? response
+        : (response as { message?: unknown }).message;
+    if (typeof message === 'string' && message.length > 0) return message;
+  }
+  return 'internal';
+}

@@ -1,9 +1,10 @@
 import { INestApplication } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { OAuth2Client } from 'google-auth-library';
-import type { Model } from 'mongoose';
+import { Types, type Model } from 'mongoose';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
+import { AiUsage } from '../src/ai/schemas/ai-usage.schema.js';
 import { RefreshToken } from '../src/auth/tokens/refresh-token.schema.js';
 import { TokensService } from '../src/auth/tokens/tokens.service.js';
 import { UserDoc } from '../src/user-docs/schemas/user-doc.schema.js';
@@ -354,6 +355,24 @@ describe('Admin users (e2e)', () => {
         .patch('/api/admin/users/64b000000000000000000000', { disabled: true })
         .expect(404);
     });
+  });
+
+  it('detaches a deleted account from its AI usage records', async () => {
+    const user = await signedInUser(app, 'g-ai-delete');
+    const usage = app.get<Model<AiUsage>>(getModelToken(AiUsage.name));
+    await usage.deleteMany({});
+    await usage.create({
+      userId: new Types.ObjectId(user.userId),
+      feature: 'meal-plan',
+      model: 'gpt-6-luna',
+      ok: true,
+      durationMs: 10,
+    });
+    await admin.delete(`/api/admin/users/${user.userId}`).expect(204);
+    const entries = await usage.find().lean();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].userId).toBeNull();
+    await usage.deleteMany({});
   });
 
   it('deletes an account with all its data', async () => {
