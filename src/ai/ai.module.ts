@@ -11,6 +11,7 @@ import { AiUsage, AiUsageSchema } from './schemas/ai-usage.schema.js';
   ],
   controllers: [AiController],
   providers: [AiService, AiUsageService],
-  exports: [AiService, AiUsageService],
+  // MongooseModule: the admin stats read the AiUsage model.
+  exports: [AiService, AiUsageService, MongooseModule],
 })
 export class AiModule {}

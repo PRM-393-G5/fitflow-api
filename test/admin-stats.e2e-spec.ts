@@ -214,6 +214,19 @@ describe('Admin stats (e2e)', () => {
     });
   });
 
+  it.each(['Asia/Saigon', 'asia/ho_chi_minh', 'America/Los_Angeles'])(
+    'accepts the zone name %s',
+    async (tz) => {
+      const { body } = await admin
+        .get(`/api/admin/stats/overview?tz=${encodeURIComponent(tz)}`)
+        .expect(200);
+      expect(body.users.total).toBe(3);
+      await admin
+        .get(`/api/admin/stats/ai?tz=${encodeURIComponent(tz)}`)
+        .expect(200);
+    },
+  );
+
   it.each(['days=0', 'days=91', 'days=abc', 'tz=Mars/Base', 'extra=1'])(
     'rejects ?%s with 400',
     async (query) => {

@@ -6,6 +6,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { getModelToken } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
+import { AiUsageService } from '../src/ai/ai-usage.service.js';
 import { AiService } from '../src/ai/ai.service.js';
 import { AiUsage } from '../src/ai/schemas/ai-usage.schema.js';
 import { EnvironmentVariables } from '../src/config/env.validation.js';
@@ -301,11 +302,22 @@ describe('/api/ai (e2e)', () => {
           ],
         });
 
+    let usageService: AiUsageService;
+
+    /** Entries are written after the response: wait for them. */
+    const logged = async () => {
+      await usageService.idle();
+      return usage.find().lean();
+    };
+
     beforeAll(() => {
       usage = app.get(getModelToken(AiUsage.name));
+      usageService = app.get(AiUsageService);
     });
 
     beforeEach(async () => {
+      // Earlier tests' calls may still be writing their entries.
+      await usageService.idle();
       await usage.deleteMany({});
       nextStatus = 200;
       nextBody = okBody;
@@ -313,7 +325,7 @@ describe('/api/ai (e2e)', () => {
 
     it('records an anonymous call without its content', async () => {
       await review().expect(200);
-      const [entry] = await usage.find().lean();
+      const [entry] = await logged();
       expect(entry).toMatchObject({
         userId: null,
         feature: 'form-review',
@@ -342,13 +354,13 @@ describe('/api/ai (e2e)', () => {
       await review()
         .set('Authorization', `Bearer ${user.accessToken}`)
         .expect(200);
-      const [entry] = await usage.find().lean();
+      const [entry] = await logged();
       expect(entry.userId?.toString()).toBe(user.userId);
     });
 
     it('still serves a caller with an invalid token, anonymously', async () => {
       await review().set('Authorization', 'Bearer not-a-jwt').expect(200);
-      const [entry] = await usage.find().lean();
+      const [entry] = await logged();
       expect(entry.userId).toBeNull();
     });
 
@@ -357,7 +369,7 @@ describe('/api/ai (e2e)', () => {
       nextBody = { error: { message: 'slow down' } };
       const res = await review().expect(429);
       expect(res.body.message).toBe('rate-limited');
-      const [entry] = await usage.find().lean();
+      const [entry] = await logged();
       expect(entry).toMatchObject({ ok: false, errorCode: 'rate-limited' });
     });
 
@@ -367,7 +379,9 @@ describe('/api/ai (e2e)', () => {
         .send({})
         .expect(400);
       await request(app.getHttpServer()).get('/api/ai/status').expect(200);
-      expect(await usage.countDocuments()).toBe(0);
+      // A logged call afterwards is the only entry.
+      await review().expect(200);
+      expect(await logged()).toHaveLength(1);
     });
   });
 });

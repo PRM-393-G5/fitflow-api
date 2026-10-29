@@ -126,10 +126,16 @@ delete their own account (they cannot sign in); an admin can.
 
 ### Admin statistics
 
-Days are counted in the `tz` the admin web sends. Signups and AI calls are
-bucketed by their server timestamp in that zone; workouts by the date of
-their `completedAt` as the phone wrote it (its local time), so an evening
-workout in Vietnam lands on the right day. Minutes follow the app: whole
+Days are counted in the `tz` the admin web sends (any IANA name, e.g.
+`Asia/Ho_Chi_Minh` or the `Asia/Saigon` browsers report; DST-aware).
+Signups and AI calls are bucketed by their server timestamp in that zone —
+MongoDB groups them per quarter hour and the API maps those to local days
+with `Intl`, since MongoDB's own time zone list lacks names like
+`Asia/Saigon`. Workouts go by the date of their `completedAt` as the
+phone wrote it (its local time), so an evening workout in Vietnam lands
+on the right day; a phone in a zone ahead of the admin's may already be
+on a later day, and those workouts count once that day starts for the
+admin. Minutes follow the app: whole
 minutes per session, at least 1. Form-check results are counted apart
 from workouts, and "active" users finished a workout or form check in the
 range.
