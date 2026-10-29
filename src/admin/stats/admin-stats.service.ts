@@ -315,9 +315,8 @@ export class AdminStatsService {
     type Group = { calls: number; errors: number; avgMs: number | null };
     const facetsQuery = this.usage
       .aggregate<{
-        totals: Array<
-          Group & { anonymous: number; users: Array<Types.ObjectId | null> }
-        >;
+        totals: Array<Group & { anonymous: number }>;
+        callers: Array<{ count: number }>;
         byFeature: Array<Group & { _id: AiFeature }>;
         bins: Bin[];
         errors: Array<{ _id: string | null; count: number }>;
@@ -336,9 +335,14 @@ export class AdminStatsService {
                   anonymous: {
                     $sum: { $cond: [{ $eq: ['$userId', null] }, 1, 0] },
                   },
-                  users: { $addToSet: '$userId' },
                 },
               },
+            ],
+            // Counted apart so the facet never holds the list of callers.
+            callers: [
+              { $match: { userId: { $ne: null } } },
+              { $group: { _id: '$userId' } },
+              { $count: 'count' },
             ],
             byFeature: [
               {
@@ -379,7 +383,8 @@ export class AdminStatsService {
       facetsQuery,
       this.usage
         .find()
-        .sort({ createdAt: -1, _id: -1 })
+        // createdAt alone, so the TTL index serves the sort.
+        .sort({ createdAt: -1 })
         .limit(RECENT_AI_CALLS)
         .lean()
         .exec(),
@@ -398,14 +403,13 @@ export class AdminStatsService {
 
     const totals = facets.totals[0];
     const dailyByDay = byLocalDay(facets.bins, tz);
-    const signedIn = (totals?.users ?? []).filter((id) => id !== null);
     return {
       range,
       status: this.ai.getStatus(),
       totals: {
         calls: totals?.calls ?? 0,
         errors: totals?.errors ?? 0,
-        users: signedIn.length,
+        users: facets.callers[0]?.count ?? 0,
         anonymousCalls: totals?.anonymous ?? 0,
         avgDurationMs: Math.round(totals?.avgMs ?? 0),
       },
