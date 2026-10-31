@@ -70,7 +70,10 @@ export interface AiUsageReport {
     errors: number;
     /** Distinct signed-in callers. */
     users: number;
-    /** Calls without a valid access token. */
+    /**
+     * Calls no longer tied to a user: since AI needs sign-in, these come
+     * from accounts deleted afterwards (or calls logged before that).
+     */
     anonymousCalls: number;
     avgDurationMs: number;
   };

@@ -20,6 +20,7 @@ import type { AuthUser } from '../auth/jwt-auth.guard.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import {
   ADMIN_LOGIN_THROTTLER,
+  AI_THROTTLER,
   AUTH_THROTTLER,
 } from '../common/throttling/throttling.module.js';
 import { AiThrottlerGuard } from './ai-throttler.guard.js';
@@ -42,7 +43,8 @@ import {
 @ApiTags('ai')
 @ApiBearerAuth()
 @Controller('ai')
-@UseGuards(JwtAuthGuard, ActiveUserGuard, AiThrottlerGuard)
+// Throttle before the account lookup, so a flood never reaches MongoDB.
+@UseGuards(JwtAuthGuard, AiThrottlerGuard, ActiveUserGuard)
 @SkipThrottle({ [AUTH_THROTTLER]: true, [ADMIN_LOGIN_THROTTLER]: true })
 export class AiController {
   constructor(
@@ -51,6 +53,8 @@ export class AiController {
   ) {}
 
   @Get('status')
+  // Spends no OpenAI tokens: not part of the AI budget.
+  @SkipThrottle({ [AI_THROTTLER]: true })
   @ApiOperation({
     summary: 'Check whether the server has an OpenAI API key configured',
   })
