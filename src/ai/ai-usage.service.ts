@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { isObjectIdOrHexString, Model, Types } from 'mongoose';
+import { UsersService } from '../users/users.service.js';
 import { AiService } from './ai.service.js';
 import { AiUsage } from './schemas/ai-usage.schema.js';
 import type { AiFeature } from './schemas/ai-usage.schema.js';
@@ -21,6 +22,7 @@ export class AiUsageService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @InjectModel(AiUsage.name) private readonly usage: Model<AiUsage>,
     private readonly ai: AiService,
+    private readonly users: UsersService,
   ) {}
 
   /** The TTL index must exist for old entries to expire. */
@@ -91,11 +93,13 @@ export class AiUsageService implements OnModuleInit, OnModuleDestroy {
     started: number,
   ): Promise<void> {
     try {
+      // An account deleted while its call ran must not reappear here.
+      const owner =
+        userId && (await this.users.exists(userId))
+          ? new Types.ObjectId(userId)
+          : null;
       await this.usage.create({
-        userId:
-          userId && isObjectIdOrHexString(userId)
-            ? new Types.ObjectId(userId)
-            : null,
+        userId: owner,
         feature,
         model: this.ai.getStatus().model,
         ok: errorCode === null,

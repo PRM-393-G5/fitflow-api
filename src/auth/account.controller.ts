@@ -8,7 +8,10 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ADMIN_LOGIN_THROTTLER } from '../common/throttling/throttling.module.js';
+import {
+  ADMIN_LOGIN_THROTTLER,
+  AI_THROTTLER,
+} from '../common/throttling/throttling.module.js';
 import { AccountService } from './account.service.js';
 import { CurrentUser } from './current-user.decorator.js';
 import { GoogleSignInDto } from './dto/google-sign-in.dto.js';
@@ -19,7 +22,7 @@ import type { AuthUser } from './jwt-auth.guard.js';
 @ApiTags('me')
 @ApiBearerAuth()
 @UseGuards(ThrottlerGuard, JwtAuthGuard)
-@SkipThrottle({ [ADMIN_LOGIN_THROTTLER]: true })
+@SkipThrottle({ [ADMIN_LOGIN_THROTTLER]: true, [AI_THROTTLER]: true })
 export class AccountController {
   constructor(private readonly account: AccountService) {}
 
