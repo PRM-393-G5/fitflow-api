@@ -96,6 +96,22 @@ export class UsersService implements OnModuleInit {
     return this.users.findById(id).exec();
   }
 
+  /** Like [requireActive], reading only the lock flag. */
+  async assertActive(id: string): Promise<void> {
+    const user = isObjectIdOrHexString(id)
+      ? await this.users.findById(id).select({ disabled: 1 }).lean().exec()
+      : null;
+    checkActive(user);
+  }
+
+  /** Whether the account [id] exists. */
+  async exists(id: string): Promise<boolean> {
+    return (
+      isObjectIdOrHexString(id) &&
+      (await this.users.exists({ _id: id })) !== null
+    );
+  }
+
   /** Stamps a sign-in that opened a session (not a refused one). */
   async recordSignIn(id: string): Promise<void> {
     await this.users
@@ -109,9 +125,8 @@ export class UsersService implements OnModuleInit {
    */
   async requireActive(id: string): Promise<UserDocument> {
     const user = await this.findById(id);
-    if (!user) throw new UnauthorizedException('Account no longer exists');
-    if (user.disabled) throw new UnauthorizedException('Account is locked');
-    return user;
+    checkActive(user);
+    return user!;
   }
 
   /** Deletes the account document; true when it existed. */
@@ -181,4 +196,10 @@ export class UsersService implements OnModuleInit {
       photoUrl: user.photoUrl,
     };
   }
+}
+
+/** 401 unless [user] exists and is not locked (the one rule for both). */
+function checkActive(user: { disabled?: boolean } | null): void {
+  if (!user) throw new UnauthorizedException('Account no longer exists');
+  if (user.disabled) throw new UnauthorizedException('Account is locked');
 }

@@ -57,6 +57,7 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | `ADMIN_TOKEN_TTL_SECONDS` | `28800` | Admin-web access token lifetime (≥ 300) |
 | `REFRESH_TOKEN_TTL_DAYS` | `30` | Refresh token lifetime |
 | `AUTH_RATE_LIMIT` | `20` | Requests per minute per client IP, shared across `/api/auth/*` and `DELETE /api/me` (`429` beyond) |
+| `AI_RATE_LIMIT` | `20` | `/api/ai/*` requests per minute per signed-in user (`429` beyond); counted per user, not per IP |
 | `ADMIN_LOGIN_RATE_LIMIT` | `10` | `POST /api/admin/auth/login` attempts per minute per client IP; a separate budget, so admin logins never block app sign-ins |
 | `TRUST_PROXY_HOPS` | `0` | Reverse proxies in front of the API; set it when deployed behind one so rate limits see the real client IP |
 | `SWAGGER_ENABLED` | on, except `NODE_ENV=production` | Serve Swagger UI at `/api/docs` |
@@ -75,12 +76,12 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 | POST | `/api/auth/refresh` | Body `{refreshToken}` → new `{accessToken, expiresIn, refreshToken}`; the old refresh token stops working |
 | POST | `/api/auth/logout` | Body `{refreshToken}` → `204`; revokes that session's refresh tokens |
 | GET | `/api/templates` | Built-in workout plans in display order (`Cache-Control: public, max-age=300`), in the app's `Workout` JSON shape (`id`, `name`, `durationMinutes`, `level`, `category`, `description`, `exercises`) |
-| GET | `/api/ai/status` | `{configured, model}` — whether the server has `OPENAI_API_KEY` configured |
-| POST | `/api/ai/generate` | Structured-output JSON completion proxy (`{system, user, schema, schemaName, reasoningEffort?, imageBase64?, imageMimeType?}`) |
-| POST | `/api/ai/workout-plan` | Generate a structured workout plan from `{request, level?, durationMinutes?, goal?}` |
-| POST | `/api/ai/meal-plan` | Generate a daily meal plan from `{targetKcal, proteinG, meals, goal?, preferences?}` |
-| POST | `/api/ai/food-photo` | Identify dishes and estimate calories/macros from `{imageBase64, imageMimeType?}` |
-| POST | `/api/ai/form-review` | Review post-set rep telemetry from `{exercise, reps}` |
+| GET | `/api/ai/status` | 🔒 `{configured, model}` — whether the server has `OPENAI_API_KEY` configured |
+| POST | `/api/ai/generate` | 🔒 Structured-output JSON completion proxy (`{system, user, schema, schemaName, reasoningEffort?, imageBase64?, imageMimeType?}`) |
+| POST | `/api/ai/workout-plan` | 🔒 Generate a structured workout plan from `{request, level?, durationMinutes?, goal?}` |
+| POST | `/api/ai/meal-plan` | 🔒 Generate a daily meal plan from `{targetKcal, proteinG, meals, goal?, preferences?}` |
+| POST | `/api/ai/food-photo` | 🔒 Identify dishes and estimate calories/macros from `{imageBase64, imageMimeType?}` |
+| POST | `/api/ai/form-review` | 🔒 Review post-set rep telemetry from `{exercise, reps}` |
 | GET | `/api/me/docs/:kind` | 🔒 All synced documents of `kind` (`sessions`, `workouts`, `weights`, `meals`); `?since=yyyy-mm-dd` keeps ids from that day on; deleted ones as `{id, deleted: true}` |
 | PUT | `/api/me/docs/:kind` | 🔒 Bulk upsert, body `{docs: [{id, …}]}` (≤ 500, ≤ 2 MB; other routes accept ≤ 100 kB) → `204` |
 | PUT | `/api/me/docs/:kind/:id` | 🔒 Create or replace one document (the app's JSON) → `204` |
@@ -107,11 +108,14 @@ environment variable is missing or invalid (see `src/config/env.validation.ts`).
 🔒 = needs `Authorization: Bearer <accessToken>`.
 🛡 = needs an admin access token from `POST /api/admin/auth/login`.
 
-Every `/api/ai/*` call except `status` is logged in `aiusages` for the
-admin web: caller (when the request carries a valid app access token;
-otherwise anonymous — the token is optional for now), feature, model,
-success or the error code the app saw, and duration. Prompts, photos and
-answers are never stored; entries expire after 180 days.
+The `/api/ai/*` routes spend the server's OpenAI key, so they need a
+signed-in user with an active account (a locked account gets `401
+Account is locked`), at most `AI_RATE_LIMIT` calls a minute per user. Every call except `status` is logged in `aiusages`
+for the admin web: caller, feature, model, success or the error code the
+app saw, and duration. Prompts, photos and answers are never stored;
+entries expire after 180 days, and deleting an account detaches its
+entries (`userId` becomes null) — so the AI report's `anonymousCalls`
+are calls from since-deleted accounts.
 
 ### Locked accounts
 
@@ -197,7 +201,7 @@ document locks the admin out immediately.
 | `workouttemplates` | `_id` (app id, e.g. `full-body-foundation`), `name`, `durationMinutes`, `level`, `category`, `description`, `exercises`, `order` | Public built-in plans |
 | `userdocs` | `userId`, `kind`, `docId`, `data`, `deleted` — unique `(userId, kind, docId)` | Synced sessions / custom workouts / weights / logged meals (id `yyyy-mm-dd:<entry>`); deletes are tombstones so another device's merge cannot resurrect them |
 | `admins` | `email` (unique, lowercase), `name`, `passwordHash`, `lastLoginAt` | Admin-web accounts |
-| `aiusages` | `userId` (or null), `feature`, `model`, `ok`, `errorCode`, `durationMs`, `createdAt` (TTL 180 days) | One entry per AI call, no content |
+| `aiusages` | `userId` (null once the account is deleted), `feature`, `model`, `ok`, `errorCode`, `durationMs`, `createdAt` (TTL 180 days) | One entry per AI call, no content |
 | `refreshtokens` | `userId`, `sessionId`, `tokenHash` (unique), `usedAt`, `expiresAt` (TTL) | Current and used tokens of each session |
 
 Every error uses the same body:
